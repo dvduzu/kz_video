@@ -140,7 +140,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
             child: Column(children: [
               SafeArea(
                 child: Container(
-                  color: Colors.black38,
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                   child: Row(children: [
                     IconButton(onPressed: widget.onBack, icon: const Icon(Icons.arrow_back, color: Colors.white)),
@@ -152,7 +151,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
               const Spacer(),
               SafeArea(
                 child: Container(
-                  color: Colors.black38,
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                   child: Row(children: [
                     IconButton(
@@ -186,7 +184,11 @@ IconButton(
                       icon: const Icon(Icons.bookmark_add_outlined, color: Colors.white),
                       onPressed: () async {
                         await VideoRepository.instance().addWatchLater(widget.video);
-                        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已加入稍后再看')));
+                        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: const Text('已加入稍后再看'),
+                          duration: const Duration(milliseconds: 1500),
+                          action: SnackBarAction(label: '关闭', onPressed: () {}),
+                        ));
                       },
                     ),
                     if (widget.video.mid > 0)
@@ -198,7 +200,11 @@ IconButton(
                             await VideoRepository.instance().removeSubscription(widget.video.mid);
                             if (mounted) {
                               setState(() => subscribed = false);
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已取消关注')));
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                content: const Text('已取消关注'),
+                                duration: const Duration(milliseconds: 1500),
+                                action: SnackBarAction(label: '关闭', onPressed: () {}),
+                              ));
                             }
                             return;
                           }
@@ -206,9 +212,17 @@ IconButton(
                           if (mounted) {
                             if (ok) {
                               setState(() => subscribed = true);
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已关注 ${widget.video.owner}')));
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                content: Text('已关注 ${widget.video.owner}'),
+                                duration: const Duration(milliseconds: 1500),
+                                action: SnackBarAction(label: '关闭', onPressed: () {}),
+                              ));
                             } else {
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('订阅已满 50 人，请到设置→订阅管理移除一个')));
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                content: const Text('订阅已满 50 人，请到设置→订阅管理移除一个'),
+                                duration: const Duration(milliseconds: 2000),
+                                action: SnackBarAction(label: '关闭', onPressed: () {}),
+                              ));
                             }
                           }
                         },
