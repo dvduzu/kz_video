@@ -134,7 +134,8 @@ class VideoRepository {
   Future<List<VideoInfo>> getDailyVideos({bool force = false}) async {
     final prefs = await SharedPreferences.getInstance();
     final minDuration = prefs.getInt('setting_min_duration') ?? 600;
-    final rid = prefs.getInt('setting_rid') ?? 0;
+    final ridKey = prefs.getString('setting_rid') ?? '';
+    final ridTids = _ridTids(ridKey);
     final today = _today();
     final key = 'daily_popular_$today';
     final tsKey = 'daily_ts_popular_$today';
@@ -177,10 +178,10 @@ class VideoRepository {
       subVideos.addAll(await getUpVideos(sub.mid));
     }
     bool isSubVid(String bvid) => subVideos.any((v) => v.bvid == bvid);
-    final popularFiltered = popular.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid) && !isSubVid(v.bvid) && (rid == 0 || v.tid == rid)).toList()
+    final popularFiltered = popular.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid) && !isSubVid(v.bvid) && (ridTids.isEmpty || ridTids.contains(v.tid))).toList()
       ..sort((a, b) => b.pubdate.compareTo(a.pubdate));
     var pool = popularFiltered;
-    if (pool.length < 10 && rid != 0) {
+    if (pool.length < 10 && ridTids.isNotEmpty) {
       pool = popular.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid) && !isSubVid(v.bvid)).toList()
         ..sort((a, b) => b.pubdate.compareTo(a.pubdate));
     }
@@ -424,16 +425,20 @@ class VideoRepository {
         'Referer': 'https://www.bilibili.com/',
       }));
       final items = (resp.data?['data']?['item'] as List?) ?? [];
-      return items.map((e) => VideoInfo(
-        bvid: e['bvid'] as String? ?? '',
-        title: e['title'] as String? ?? '',
-        pic: (e['cover'] as String? ?? '').replaceFirst('http://', 'https://'),
-        duration: (e['duration'] as int?) ?? _parseLength(e['length'] as String? ?? '0'),
-        owner: e['author'] as String? ?? '',
-        view: e['play'] as int? ?? 0,
-        pubdate: (e['ctime'] as int?) ?? 0,
-        mid: mid,
-      )).where((v) => v.bvid.isNotEmpty).toList();
+      return items.map((e) {
+        final lenVal = e['length'];
+        final durVal = e['duration'];
+        return VideoInfo(
+          bvid: e['bvid'] as String? ?? '',
+          title: (e['title'] as String?) ?? '',
+          pic: ((e['cover'] as String?) ?? '').replaceFirst('http://', 'https://'),
+          duration: durVal is int ? durVal : (lenVal is String ? _parseLength(lenVal) : 0),
+          owner: (e['author'] as String?) ?? '',
+          view: (e['play'] as int?) ?? 0,
+          pubdate: (e['ctime'] as int?) ?? 0,
+          mid: mid,
+        );
+      }).where((v) => v.bvid.isNotEmpty).toList();
     } catch (_) { return []; }
   }
 
@@ -442,6 +447,17 @@ class VideoRepository {
     var sec = 0;
     for (final p in parts) { sec = sec * 60 + (int.tryParse(p) ?? 0); }
     return sec;
+  }
+
+  Set<int> _ridTids(String key) {
+    return switch (key) {
+      'tech' => {201, 231, 232, 208, 228},
+      'edu' => {124, 228, 229, 208},
+      'life' => {21, 76, 122, 164, 176, 212, 213, 215, 218, 219, 220},
+      'game' => {17, 65, 171, 172, 173, 136},
+      'ent' => {22, 85, 138, 241, 242, 157, 158, 20, 199, 200, 193},
+      _ => <int>{},
+    };
   }
 
   Future<Set<String>> _getBlacklistSet() async {

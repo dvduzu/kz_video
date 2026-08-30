@@ -33,6 +33,8 @@ class _VideoListScreenState extends State<VideoListScreen> {
       final list = await VideoRepository.instance().getDailyVideos(force: force);
       setState(() { videos = list; loading = false; });
     } catch (e) {
+      // ignore: avoid_print
+      print('[kzv] load error: $e');
       setState(() { error = e.toString(); loading = false; });
     }
   }
@@ -274,12 +276,12 @@ class _VideoListScreenState extends State<VideoListScreen> {
   Future<void> _showSettings() async {
     final prefs = await SharedPreferences.getInstance();
     final minDuration = prefs.getInt('setting_min_duration') ?? 600;
-    final rid = prefs.getInt('setting_rid') ?? 0;
+    final rid = prefs.getString('setting_rid') ?? '';
     final history = prefs.getBool('setting_history') ?? true;
     final watchLater = prefs.getBool('setting_watch_later') ?? true;
     final manualAdd = prefs.getBool('setting_manual_mid') ?? false;
     if (!mounted) return;
-    final result = await showModalBottomSheet<({int minDuration, int rid, bool history, bool watchLater, bool manualAdd})>(
+    final result = await showModalBottomSheet<({int minDuration, String rid, bool history, bool watchLater, bool manualAdd})>(
       context: context, showDragHandle: true, isScrollControlled: true,
       builder: (ctx) {
         var selDur = minDuration;
@@ -289,7 +291,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
         var selManual = manualAdd;
         final manualCtl = TextEditingController();
         const durs = {600: '10 分钟', 1200: '20 分钟', 1800: '30 分钟'};
-        const rids = {0: '全部', 188: '科技', 36: '知识', 160: '生活', 4: '游戏', 5: '娱乐'};
+        const rids = {'': '全部', 'tech': '科技', 'edu': '知识', 'life': '生活', 'game': '游戏', 'ent': '娱乐'};
         return StatefulBuilder(builder: (ctx, setModalState) => SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -374,7 +376,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
     );
     if (result != null) {
       await prefs.setInt('setting_min_duration', result.minDuration);
-      await prefs.setInt('setting_rid', result.rid);
+      await prefs.setString('setting_rid', result.rid);
       await prefs.setBool('setting_history', result.history);
       await prefs.setBool('setting_watch_later', result.watchLater);
       await prefs.setBool('setting_manual_mid', result.manualAdd);
