@@ -206,25 +206,60 @@ IconButton(
   }
 }
 
-class _ProgressBar extends StatelessWidget {
+class _ProgressBar extends StatefulWidget {
   final Player player;
   final Duration position;
   final Duration duration;
   const _ProgressBar({required this.player, required this.position, required this.duration});
   @override
+  State<_ProgressBar> createState() => _ProgressBarState();
+}
+
+class _ProgressBarState extends State<_ProgressBar> {
+  double? _dragMs;
+
+  String _fmt(Duration d) {
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    final h = d.inHours;
+    return h > 0 ? '$h:$m:$s' : '$m:$s';
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final max = duration.inMilliseconds.toDouble();
-    final cur = position.inMilliseconds.toDouble().clamp(0.0, max);
-    return SliderTheme(
-      data: SliderThemeData(trackHeight: 3, thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6), overlayShape: const RoundSliderOverlayShape(overlayRadius: 12)),
-      child: Slider(
-        value: max <= 0 ? 0.0 : cur,
-        max: max <= 0 ? 1.0 : max,
-        activeColor: Theme.of(context).colorScheme.primary,
-        inactiveColor: Colors.white24,
-        onChangeEnd: (v) => player.seek(Duration(milliseconds: v.round())),
-        onChanged: (_) {},
-      ),
+    final max = widget.duration.inMilliseconds.toDouble();
+    final pos = widget.position.inMilliseconds.toDouble().clamp(0.0, max);
+    final dragging = _dragMs != null;
+    final display = (dragging ? _dragMs! : pos).clamp(0.0, max);
+    return Stack(
+      alignment: Alignment.topCenter,
+      children: [
+        SliderTheme(
+          data: SliderThemeData(
+            trackHeight: 3,
+            thumbShape: RoundSliderThumbShape(enabledThumbRadius: dragging ? 8 : 6),
+            overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+          ),
+          child: Slider(
+            value: max <= 0 ? 0.0 : display,
+            max: max <= 0 ? 1.0 : max,
+            activeColor: Theme.of(context).colorScheme.primary,
+            inactiveColor: Colors.white24,
+            onChangeStart: (v) => setState(() => _dragMs = v),
+            onChanged: (v) => setState(() => _dragMs = v),
+            onChangeEnd: (v) {
+              widget.player.seek(Duration(milliseconds: v.round()));
+              setState(() => _dragMs = null);
+            },
+          ),
+        ),
+        if (dragging)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.7), borderRadius: BorderRadius.circular(6)),
+            child: Text(_fmt(Duration(milliseconds: display.round())), style: const TextStyle(color: Colors.white, fontSize: 14)),
+          ),
+      ],
     );
   }
 }
