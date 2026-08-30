@@ -27,6 +27,15 @@ class _VideoListScreenState extends State<VideoListScreen> {
     _load();
   }
 
+  Future<void> _onRefresh() async {
+    if (!await VideoRepository.instance().canRefreshToday()) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('今天已结束，明天再来')));
+      return;
+    }
+    await VideoRepository.instance().recordRefresh();
+    await _load(force: true);
+  }
+
   Future<void> _load({bool force = false}) async {
     setState(() { loading = true; error = null; });
     try {
@@ -96,7 +105,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
               child: FilledButton.tonalIcon(
-                onPressed: () => _load(force: true),
+                onPressed: _onRefresh,
                 icon: const Icon(Icons.refresh, size: 18),
                 label: const Text('换一批'),
               ),
@@ -280,8 +289,10 @@ class _VideoListScreenState extends State<VideoListScreen> {
     final history = prefs.getBool('setting_history') ?? true;
     final watchLater = prefs.getBool('setting_watch_later') ?? true;
     final manualAdd = prefs.getBool('setting_manual_mid') ?? false;
+    final sourceMode = prefs.getString('setting_source_mode') ?? 'mixed';
+    final showModeSel = prefs.getBool('setting_source_mode_enabled') ?? false;
     if (!mounted) return;
-    final result = await showModalBottomSheet<({int minDuration, String rid, bool history, bool watchLater, bool manualAdd})>(
+    final result = await showModalBottomSheet<({int minDuration, String rid, bool history, bool watchLater, bool manualAdd, String sourceMode, bool showModeSel})>(
       context: context, showDragHandle: true, isScrollControlled: true,
       builder: (ctx) {
         var selDur = minDuration;
@@ -289,13 +300,19 @@ class _VideoListScreenState extends State<VideoListScreen> {
         var selHistory = history;
         var selWatchLater = watchLater;
         var selManual = manualAdd;
+        var selMode = sourceMode;
+        var selShowMode = showModeSel;
         final manualCtl = TextEditingController();
         const durs = {600: '10 分钟', 1200: '20 分钟', 1800: '30 分钟'};
         const rids = {'': '全部', 'tech': '科技', 'edu': '知识', 'life': '生活', 'game': '游戏', 'ent': '娱乐'};
         return StatefulBuilder(builder: (ctx, setModalState) => SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('分区', style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text('分区（弱倾向）', style: TextStyle(fontWeight: FontWeight.bold)),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 2),
+              child: Text('受限于匿名访问，分区为弱倾向，不保证覆盖该分区全部内容', style: TextStyle(fontSize: 12, color: Colors.grey)),
+            ),
             Wrap(spacing: 8, children: rids.entries.map((e) => ChoiceChip(
               label: Text(e.value),
               selected: selRid == e.key,
@@ -362,11 +379,31 @@ class _VideoListScreenState extends State<VideoListScreen> {
                       FilledButton(onPressed: () => _manualAddSub(ctx, manualCtl), child: const Text('添加')),
                     ]),
                   ),
+                const Divider(height: 4),
+                SwitchListTile(
+                  title: const Text('数据源模式切换'),
+                  subtitle: const Text('默认混合（订阅+热门），开启后可选'),
+                  value: selShowMode,
+                  onChanged: (v) => setModalState(() => selShowMode = v),
+                ),
+                if (selShowMode)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: Wrap(spacing: 8, children: {
+                      'mixed': '混合',
+                      'sub': '纯订阅',
+                      'popular': '纯热门',
+                    }.entries.map((e) => ChoiceChip(
+                      label: Text(e.value),
+                      selected: selMode == e.key,
+                      onSelected: (_) => setModalState(() => selMode = e.key),
+                    )).toList()),
+                  ),
               ],
             ),
             const SizedBox(height: 8),
             SizedBox(width: double.infinity, child: FilledButton(
-              onPressed: () => Navigator.pop(ctx, (minDuration: selDur, rid: selRid, history: selHistory, watchLater: selWatchLater, manualAdd: selManual)),
+              onPressed: () => Navigator.pop(ctx, (minDuration: selDur, rid: selRid, history: selHistory, watchLater: selWatchLater, manualAdd: selManual, sourceMode: selMode, showModeSel: selShowMode)),
               child: const Text('应用'),
             )),
             const SizedBox(height: 8),
@@ -380,6 +417,8 @@ class _VideoListScreenState extends State<VideoListScreen> {
       await prefs.setBool('setting_history', result.history);
       await prefs.setBool('setting_watch_later', result.watchLater);
       await prefs.setBool('setting_manual_mid', result.manualAdd);
+      await prefs.setString('setting_source_mode', result.sourceMode);
+      await prefs.setBool('setting_source_mode_enabled', result.showModeSel);
       await _load(force: true);
     }
   }

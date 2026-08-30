@@ -178,6 +178,7 @@ class VideoRepository {
       subVideos.addAll(await getUpVideos(sub.mid));
     }
     bool isSubVid(String bvid) => subVideos.any((v) => v.bvid == bvid);
+    final mode = prefs.getString('setting_source_mode') ?? 'mixed';
     final popularFiltered = popular.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid) && !isSubVid(v.bvid) && (ridTids.isEmpty || ridTids.contains(v.tid))).toList()
       ..sort((a, b) => b.pubdate.compareTo(a.pubdate));
     var pool = popularFiltered;
@@ -187,10 +188,19 @@ class VideoRepository {
     }
     final subFiltered = subVideos.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid)).toList()
       ..sort((a, b) => b.pubdate.compareTo(a.pubdate));
-    final pickedSub = subFiltered.take(4).toList();
-    final pickedPopular = pool.take(40).toList()..shuffle(Random());
-    final chosen = <VideoInfo>[...pickedSub];
-    chosen.addAll(pickedPopular.where((v) => !chosen.any((c) => c.bvid == v.bvid)).take(10 - chosen.length));
+    final List<VideoInfo> chosen;
+    if (mode == 'sub') {
+      final picked = subFiltered.take(20).toList()..shuffle(Random());
+      chosen = picked.take(10).toList();
+    } else if (mode == 'popular') {
+      final picked = pool.take(40).toList()..shuffle(Random());
+      chosen = picked.take(10).toList();
+    } else {
+      final pickedSub = subFiltered.take(4).toList();
+      final pickedPopular = pool.take(40).toList()..shuffle(Random());
+      chosen = <VideoInfo>[...pickedSub];
+      chosen.addAll(pickedPopular.where((v) => !chosen.any((c) => c.bvid == v.bvid)).take(10 - chosen.length));
+    }
     // ignore: avoid_print
     print('[kzv] daily min=$minDuration sub=${subFiltered.length} popular=${popularFiltered.length} chosen=${chosen.length}');
     if (chosen.isNotEmpty) {
@@ -207,28 +217,30 @@ class VideoRepository {
     final requested = qn != null ? [qn] : [80, 64, 32];
     String? lastError;
     for (final q in requested) {
-      try {
-        final playData = await _wbiGet('/x/player/wbi/playurl', {
-          'bvid': bvid,
-          'cid': cid,
-          'qn': q,
-          'fnval': 1,
-          'fnver': 0,
-          'fourk': 1,
-          'try_look': 1,
-          'web_location': 1315873,
-          ..._dmImgParams(),
-        });
-        final data = playData['data'] as Map<String, dynamic>?;
-        final durl = data?['durl'] as List?;
-        if (durl != null && durl.isNotEmpty) {
-          return durl.first['url'] as String;
+      for (final fnval in [1, 0]) {
+        try {
+          final playData = await _wbiGet('/x/player/wbi/playurl', {
+            'bvid': bvid,
+            'cid': cid,
+            'qn': q,
+            'fnval': fnval,
+            'fnver': 0,
+            'fourk': 1,
+            'try_look': 1,
+            'web_location': 1315873,
+            ..._dmImgParams(),
+          });
+          final data = playData['data'] as Map<String, dynamic>?;
+          final durl = data?['durl'] as List?;
+          if (durl != null && durl.isNotEmpty) {
+            return durl.first['url'] as String;
+          }
+        } catch (e) {
+          lastError = e.toString();
         }
-      } catch (e) {
-        lastError = e.toString();
       }
     }
-    throw Exception('获取播放地址失败：$lastError');
+    throw Exception('获取播放地址失败（无可用 durl）：$lastError');
   }
 
   Map<String, dynamic> _dmImgParams() {
@@ -458,6 +470,20 @@ class VideoRepository {
       'ent' => {22, 85, 138, 241, 242, 157, 158, 20, 199, 200, 193},
       _ => <int>{},
     };
+  }
+
+  Future<bool> canRefreshToday() async {
+    final prefs = await SharedPreferences.getInstance();
+    final today = _today();
+    final count = prefs.getInt('refresh_count_$today') ?? 0;
+    return count < 5;
+  }
+
+  Future<void> recordRefresh() async {
+    final prefs = await SharedPreferences.getInstance();
+    final today = _today();
+    final count = prefs.getInt('refresh_count_$today') ?? 0;
+    await prefs.setInt('refresh_count_$today', count + 1);
   }
 
   Future<Set<String>> _getBlacklistSet() async {
