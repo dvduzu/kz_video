@@ -224,7 +224,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
     showModalBottomSheet(context: context, showDragHandle: true, builder: (ctx) => SizedBox(
       height: MediaQuery.of(ctx).size.height * 0.6,
       child: Column(children: [
-        ListTile(leading: const Icon(Icons.person_add_alt), title: Text('订阅管理 (${subs.length}/10)', style: Theme.of(ctx).textTheme.titleMedium)),
+        ListTile(leading: const Icon(Icons.person_add_alt), title: Text('订阅管理 (${subs.length}/50)', style: Theme.of(ctx).textTheme.titleMedium)),
         if (subs.isEmpty) const Expanded(child: Center(child: Text('暂无订阅，播放页可关注 UP 主'))),
         Expanded(child: ListView.builder(
           itemCount: subs.length,
@@ -277,14 +277,17 @@ class _VideoListScreenState extends State<VideoListScreen> {
     final rid = prefs.getInt('setting_rid') ?? 0;
     final history = prefs.getBool('setting_history') ?? true;
     final watchLater = prefs.getBool('setting_watch_later') ?? true;
+    final manualAdd = prefs.getBool('setting_manual_mid') ?? false;
     if (!mounted) return;
-    final result = await showModalBottomSheet<({int minDuration, int rid, bool history, bool watchLater})>(
+    final result = await showModalBottomSheet<({int minDuration, int rid, bool history, bool watchLater, bool manualAdd})>(
       context: context, showDragHandle: true, isScrollControlled: true,
       builder: (ctx) {
         var selDur = minDuration;
         var selRid = rid;
         var selHistory = history;
         var selWatchLater = watchLater;
+        var selManual = manualAdd;
+        final manualCtl = TextEditingController();
         const durs = {600: '10 分钟', 1200: '20 分钟', 1800: '30 分钟'};
         const rids = {0: '全部', 188: '科技', 36: '知识', 160: '生活', 4: '游戏', 5: '娱乐'};
         return StatefulBuilder(builder: (ctx, setModalState) => SingleChildScrollView(
@@ -331,9 +334,37 @@ class _VideoListScreenState extends State<VideoListScreen> {
                 _showBlacklist();
               },
             ),
+            const Divider(height: 8),
+            ExpansionTile(
+              leading: const Icon(Icons.settings_suggest),
+              title: const Text('其他功能'),
+              subtitle: const Text('手动添加 UP 等'),
+              children: [
+                SwitchListTile(
+                  title: const Text('手动添加 UP'),
+                  subtitle: const Text('按 mid 手动关注'),
+                  value: selManual,
+                  onChanged: (v) => setModalState(() => selManual = v),
+                ),
+                if (selManual)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: Row(children: [
+                      Expanded(child: TextField(
+                        controller: manualCtl,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(hintText: '输入 UP 主 mid (数字ID)', isDense: true),
+                        onSubmitted: (_) => _manualAddSub(ctx, manualCtl),
+                      )),
+                      const SizedBox(width: 8),
+                      FilledButton(onPressed: () => _manualAddSub(ctx, manualCtl), child: const Text('添加')),
+                    ]),
+                  ),
+              ],
+            ),
             const SizedBox(height: 8),
             SizedBox(width: double.infinity, child: FilledButton(
-              onPressed: () => Navigator.pop(ctx, (minDuration: selDur, rid: selRid, history: selHistory, watchLater: selWatchLater)),
+              onPressed: () => Navigator.pop(ctx, (minDuration: selDur, rid: selRid, history: selHistory, watchLater: selWatchLater, manualAdd: selManual)),
               child: const Text('应用'),
             )),
             const SizedBox(height: 8),
@@ -346,7 +377,21 @@ class _VideoListScreenState extends State<VideoListScreen> {
       await prefs.setInt('setting_rid', result.rid);
       await prefs.setBool('setting_history', result.history);
       await prefs.setBool('setting_watch_later', result.watchLater);
+      await prefs.setBool('setting_manual_mid', result.manualAdd);
       await _load(force: true);
     }
+  }
+
+  Future<void> _manualAddSub(BuildContext ctx, TextEditingController ctl) async {
+    final mid = int.tryParse(ctl.text.trim());
+    if (mid == null || mid <= 0) {
+      if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('请输入有效的 mid')));
+      return;
+    }
+    final ok = await VideoRepository.instance().addSubscription(mid, '');
+    if (ctx.mounted) {
+      ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(ok ? '已添加 mid $mid' : '订阅已满 50 人')));
+    }
+    ctl.clear();
   }
 }

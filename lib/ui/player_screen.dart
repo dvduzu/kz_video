@@ -208,7 +208,7 @@ IconButton(
                               setState(() => subscribed = true);
                               ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已关注 ${widget.video.owner}')));
                             } else {
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('订阅已满 10 人，请到设置→订阅管理移除一个')));
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('订阅已满 50 人，请到设置→订阅管理移除一个')));
                             }
                           }
                         },

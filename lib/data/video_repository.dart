@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'app_sign.dart';
 import 'cookie_jar_sync.dart';
 import 'models.dart';
 import 'wbi_sign.dart';
@@ -155,7 +156,7 @@ class VideoRepository {
         try {
           final data = await _wbiGet('/x/web-interface/popular', {'pn': pn, 'ps': 30});
           final lst = (data['data']?['list'] as List?) ?? [];
-          popular.addAll(lst.where((e) => rid == 0 || (e['tid'] as int? ?? 0) == rid).map((e) => VideoInfo(
+          popular.addAll(lst.map((e) => VideoInfo(
             bvid: e['bvid'] as String,
             title: e['title'] as String? ?? '',
             pic: (e['pic'] as String? ?? '').replaceFirst('http://', 'https://'),
@@ -164,6 +165,7 @@ class VideoRepository {
             view: (e['stat']?['view'] as int?) ?? 0,
             pubdate: (e['pubdate'] as int?) ?? 0,
             mid: (e['owner']?['mid'] as int?) ?? 0,
+            tid: (e['tid'] as int?) ?? 0,
           )));
         } catch (_) {}
       }
@@ -175,12 +177,17 @@ class VideoRepository {
       subVideos.addAll(await getUpVideos(sub.mid));
     }
     bool isSubVid(String bvid) => subVideos.any((v) => v.bvid == bvid);
-    final popularFiltered = popular.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid) && !isSubVid(v.bvid)).toList()
+    final popularFiltered = popular.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid) && !isSubVid(v.bvid) && (rid == 0 || v.tid == rid)).toList()
       ..sort((a, b) => b.pubdate.compareTo(a.pubdate));
+    var pool = popularFiltered;
+    if (pool.length < 10 && rid != 0) {
+      pool = popular.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid) && !isSubVid(v.bvid)).toList()
+        ..sort((a, b) => b.pubdate.compareTo(a.pubdate));
+    }
     final subFiltered = subVideos.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid)).toList()
       ..sort((a, b) => b.pubdate.compareTo(a.pubdate));
     final pickedSub = subFiltered.take(4).toList();
-    final pickedPopular = popularFiltered.take(40).toList()..shuffle(Random());
+    final pickedPopular = pool.take(40).toList()..shuffle(Random());
     final chosen = <VideoInfo>[...pickedSub];
     chosen.addAll(pickedPopular.where((v) => !chosen.any((c) => c.bvid == v.bvid)).take(10 - chosen.length));
     // ignore: avoid_print
@@ -351,7 +358,7 @@ class VideoRepository {
     final prefs = await SharedPreferences.getInstance();
     final list = prefs.getStringList('subscriptions') ?? [];
     if (list.any((e) => _subMidOfJson(e) == mid)) return true;
-    if (list.length >= 10) return false;
+    if (list.length >= 50) return false;
     list.add(jsonEncode({'mid': mid, 'name': name}));
     await prefs.setStringList('subscriptions', list);
     return true;
@@ -386,6 +393,12 @@ class VideoRepository {
   }
 
   Future<List<VideoInfo>> getUpVideos(int mid) async {
+    final web = await _getUpVideosWeb(mid);
+    if (web.isNotEmpty) return web;
+    return _getUpVideosApp(mid);
+  }
+
+  Future<List<VideoInfo>> _getUpVideosWeb(int mid) async {
     try {
       final data = await _wbiGet('/x/space/wbi/arc/search', {'mid': mid, 'ps': 30, 'tid': 0, 'pn': 1, 'keyword': '', 'order': 'pubdate', 'platform': 'web'});
       final vlist = (data['data']?['list']?['vlist'] as List?) ?? [];
@@ -397,6 +410,28 @@ class VideoRepository {
         owner: e['author'] as String? ?? '',
         view: e['play'] as int? ?? 0,
         pubdate: e['created'] as int? ?? 0,
+        mid: mid,
+      )).where((v) => v.bvid.isNotEmpty).toList();
+    } catch (_) { return []; }
+  }
+
+  Future<List<VideoInfo>> _getUpVideosApp(int mid) async {
+    try {
+      final params = <String, dynamic>{'vmid': mid, 'order': 'pubdate', 'mobi_app': 'android'};
+      AppSign.appSign(params);
+      final resp = await dio.get('https://app.bilibili.com/x/v2/space/archive/cursor', queryParameters: params, options: Options(headers: {
+        'User-Agent': 'Mozilla/5.0 BiliDroid/8.43.0 (bbcallen@gmail.com) os/android model/android mobi_app/android build/8430300 channel/master innerVer/8430300 osVer/15 network/2',
+        'Referer': 'https://www.bilibili.com/',
+      }));
+      final items = (resp.data?['data']?['item'] as List?) ?? [];
+      return items.map((e) => VideoInfo(
+        bvid: e['bvid'] as String? ?? '',
+        title: e['title'] as String? ?? '',
+        pic: (e['cover'] as String? ?? '').replaceFirst('http://', 'https://'),
+        duration: (e['duration'] as int?) ?? _parseLength(e['length'] as String? ?? '0'),
+        owner: e['author'] as String? ?? '',
+        view: e['play'] as int? ?? 0,
+        pubdate: (e['ctime'] as int?) ?? 0,
         mid: mid,
       )).where((v) => v.bvid.isNotEmpty).toList();
     } catch (_) { return []; }
