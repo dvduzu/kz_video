@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:media_kit/media_kit.dart';
 import 'data/models.dart';
 import 'data/video_repository.dart';
 import 'ui/player_screen.dart';
@@ -8,6 +9,7 @@ import 'ui/video_list_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  MediaKit.ensureInitialized();
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   final cookiePath = '${Directory.systemTemp.path}/kzv_cookies';
   await Directory(cookiePath).create(recursive: true);
