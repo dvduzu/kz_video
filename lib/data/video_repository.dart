@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 import 'package:cookie_jar/cookie_jar.dart';
+import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -31,6 +32,7 @@ class VideoRepository {
       receiveTimeout: const Duration(seconds: 10),
     ));
     dio.interceptors.add(CookieManager(jar));
+    dio.interceptors.add(LogInterceptor(requestBody: false, responseBody: false, requestHeader: false));
     return VideoRepository._(dio, jar);
   }
 
@@ -55,31 +57,86 @@ class VideoRepository {
   }
 
   bool _buvidReady = false;
+  Map<String, String>? _fullCookies;
+
+  String _hmacSha256(String key, String message) => Hmac(sha256, utf8.encode(key)).convert(utf8.encode(message)).toString();
+
+  String _hex(int len) {
+    final r = Random();
+    final b = List<int>.generate(len, (_) => r.nextInt(256));
+    return b.map((e) => e.toRadixString(16).padLeft(2, '0')).join();
+  }
+
+  String _genUuid() {
+    const map = ['1','2','3','4','5','6','7','8','9','A','B','C','D','E','F','10'];
+    final r = Random();
+    final sb = StringBuffer();
+    final idx = [9,13,17,21];
+    for (var i = 0; i < 32; i++) {
+      if (idx.contains(i)) sb.write('-');
+      sb.write(map[r.nextInt(16)]);
+    }
+    sb.write('${(DateTime.now().millisecondsSinceEpoch % 100000).toString().padLeft(5, '0')}infoc');
+    return sb.toString();
+  }
+
   Future<void> _ensureBuvid() async {
     if (_buvidReady) return;
     try {
-      await dio.get('https://www.bilibili.com/');
+      final spi = await dio.get('https://api.bilibili.com/x/frontend/finger/spi');
+      final data = (spi.data as Map<String, dynamic>)['data'] as Map<String, dynamic>;
+      final b3 = data['b_3'] as String? ?? '';
+      final b4 = data['b_4'] as String? ?? '';
+      final ts = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final cookies = <String, String>{
+        'buvid3': b3,
+        'buvid4': b4,
+        'b_nut': '$ts',
+        'b_lsid': '${_hex(32).toUpperCase()}_${DateTime.now().millisecondsSinceEpoch.toRadixString(16).toUpperCase()}',
+        '_uuid': _genUuid(),
+        'buvid_fp': _hex(16),
+      };
+      final hexSign = _hmacSha256('XgwSnGZ1p', 'ts$ts');
+      try {
+        final tick = await dio.post(
+          'https://api.bilibili.com/bapis/bilibili.api.ticket.v1.Ticket/GenWebTicket',
+          queryParameters: {'key_id': 'ec02', 'hexsign': hexSign, 'context[ts]': '$ts', 'csrf': ''},
+        );
+        final t = ((tick.data as Map<String, dynamic>)['data'] as Map<String, dynamic>?)?['ticket'] as String?;
+        if (t != null && t.isNotEmpty) cookies['bili_ticket'] = t;
+      } catch (e) {
+        // ignore: avoid_print
+        print('[kzv] bili_ticket failed: $e');
+      }
+      _fullCookies = cookies;
       _buvidReady = true;
+      // ignore: avoid_print
+      print('[kzv] full cookies: ${cookies.keys.join(',')}');
     } catch (e) {
-      // 拿不到 buvid3 时后续播放可能因防盗链 403，记录以便定位
       // ignore: avoid_print
       print('[kzv] _ensureBuvid failed: $e');
     }
   }
 
   Future<Map<String, dynamic>> _wbiGet(String path, Map<String, dynamic> params) async {
+    await _ensureBuvid();
     final mixinKey = await _getMixinKey();
     final signed = Map<String, dynamic>.from(params);
     WbiSign.sign(signed, mixinKey);
-    final resp = await dio.get(path, queryParameters: signed);
+    final cookieHeader = _fullCookies?.entries.map((e) => '${e.key}=${e.value}').join('; ');
+    final resp = await dio.get(path, queryParameters: signed, options: Options(headers: {
+      if (cookieHeader != null) 'Cookie': cookieHeader,
+    }));
     return resp.data as Map<String, dynamic>;
   }
 
   Future<List<VideoInfo>> getDailyVideos({bool force = false}) async {
     final prefs = await SharedPreferences.getInstance();
+    final rid = (prefs.getInt('setting_rid') ?? 188) == 201 ? 188 : (prefs.getInt('setting_rid') ?? 188);
+    final minDuration = prefs.getInt('setting_min_duration') ?? 600;
     final today = _today();
-    final key = 'daily_$today';
-    final tsKey = 'daily_ts_$today';
+    final key = 'daily_${rid}_$today';
+    final tsKey = 'daily_ts_${rid}_$today';
     final now = DateTime.now().millisecondsSinceEpoch;
     if (!force) {
       final cachedTs = prefs.getInt(tsKey);
@@ -91,12 +148,19 @@ class VideoRepository {
         } catch (_) {}
       }
     }
-    final rid = prefs.getInt('setting_rid') ?? 188;
-    final minDuration = prefs.getInt('setting_min_duration') ?? 600;
-    final data = await _wbiGet('/x/web-interface/ranking/v2', {'rid': rid});
     final blacklist = await _getBlacklistSet();
-    final list = (data['data']?['list'] as List?) ?? [];
-    final videos = list.where((e) => (e['duration'] as int? ?? 0) >= minDuration && !blacklist.contains(e['bvid'])).map((e) => VideoInfo(
+    List<dynamic> rawList = [];
+    for (var attempt = 0; attempt < 3; attempt++) {
+      final data = await _wbiGet('/x/web-interface/ranking/v2', {'rid': rid});
+      rawList = (data['data']?['list'] as List?) ?? [];
+      if (rawList.isNotEmpty) break;
+      await Future<void>.delayed(Duration(milliseconds: 500 * (attempt + 1)));
+    }
+    if (rawList.isEmpty && rid != 188) {
+      final data = await _wbiGet('/x/web-interface/ranking/v2', {'rid': 188});
+      rawList = (data['data']?['list'] as List?) ?? [];
+    }
+    final videos = rawList.where((e) => (e['duration'] as int? ?? 0) >= minDuration && !blacklist.contains(e['bvid'])).map((e) => VideoInfo(
       bvid: e['bvid'] as String,
       title: e['title'] as String? ?? '',
       pic: (e['pic'] as String? ?? '').replaceFirst('http://', 'https://'),
@@ -144,31 +208,52 @@ class VideoRepository {
   }
 
   Map<String, dynamic> _dmImgParams() {
+    const vendors = ['AMD', 'Intel', 'NVIDIA'];
+    const gpus = ['AMD Radeon RX 6700 XT', 'AMD Radeon RX 6600', 'Intel(R) UHD Graphics 630', 'Intel(R) Iris(R) Xe Graphics', 'NVIDIA GeForce RTX 3060', 'NVIDIA GeForce RTX 4060 Laptop GPU', 'NVIDIA GeForce GTX 1650 Ti'];
+    final r = Random();
+    final vendor = vendors[r.nextInt(vendors.length)];
+    final gpu = gpus[r.nextInt(gpus.length)];
+    final webgl = 'WebGL 1.0 (OpenGL ES 2.0 Chromium)';
+    final angle = 'ANGLE ($vendor, $gpu Direct3D11 vs_5_0 ps_5_0, D3D11)Google Inc. ($vendor)';
+    final w = 1920 - 60 - r.nextInt(60);
+    final h = 1080 - 90 - r.nextInt(60);
+    final rnd = r.nextInt(114);
+    final o1 = 3 * r.nextInt(514);
+    final o2 = 4 * r.nextInt(514);
+    String b64(String s) => base64Encode(utf8.encode(s)).replaceAll('=', '');
     return {
       'dm_img_list': '[]',
-      'dm_img_str': 'V2ViR0wgdmVyc2lvbg==',
-      'dm_cover_img_str': 'V2ViR0wgcmVuZGVyZXI=',
-      'dm_img_inter': '{"ds":[],"wh":[0,0,0],"of":[0,0,0]}',
+      'dm_img_str': b64(webgl),
+      'dm_cover_img_str': b64(angle),
+      'dm_img_inter': '{"ds":[],"wh":[$w,$h,$rnd],"of":[$o1,$o2,$rnd]}',
     };
   }
 
   String? get buvid3 {
-    for (final c in cookieJar.loadSync(Uri.parse('https://www.bilibili.com/'))) { if (c.name == 'buvid3') return c.value; }
-    return null;
+    return _fullCookies?['buvid3'];
   }
 
-  Future<void> addBlacklist(String bvid) async {
+  Future<void> addBlacklist(VideoInfo v) async {
     final prefs = await SharedPreferences.getInstance();
     final list = prefs.getStringList('blacklist') ?? [];
-    if (!list.contains(bvid)) {
-      list.add(bvid);
-      await prefs.setStringList('blacklist', list);
-    }
+    list.removeWhere((e) => _bvidOfJson(e) == v.bvid);
+    list.add(jsonEncode(v.toJson()));
+    await prefs.setStringList('blacklist', list);
   }
 
-  Future<bool> isBlacklisted(String bvid) async {
+  Future<List<VideoInfo>> getBlacklistItems() async {
     final prefs = await SharedPreferences.getInstance();
-    return (prefs.getStringList('blacklist') ?? []).contains(bvid);
+    final list = prefs.getStringList('blacklist') ?? [];
+    return list.map((e) {
+      try { return VideoInfo.fromJson(jsonDecode(e) as Map<String, dynamic>); } catch (_) { return null; }
+    }).whereType<VideoInfo>().toList();
+  }
+
+  Future<void> removeBlacklist(String bvid) async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList('blacklist') ?? [];
+    list.removeWhere((e) => _bvidOfJson(e) == bvid);
+    await prefs.setStringList('blacklist', list);
   }
 
   Future<void> saveProgress(String bvid, int positionMs, int durationMs) async {
@@ -188,11 +273,22 @@ class VideoRepository {
     return (positionMs: pos, durationMs: dur);
   }
 
+  Future<bool> isHistoryEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('setting_history') ?? true;
+  }
+
+  Future<bool> isWatchLaterEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('setting_watch_later') ?? true;
+  }
+
   Future<void> addHistory(VideoInfo v) async {
+    if (!await isHistoryEnabled()) return;
     final prefs = await SharedPreferences.getInstance();
     final list = prefs.getStringList('history') ?? [];
-    list.removeWhere((e) => e.startsWith('${v.bvid}|'));
-    list.insert(0, '${v.bvid}|${v.title}|${DateTime.now().millisecondsSinceEpoch}');
+    list.removeWhere((e) => _bvidOfJson(e) == v.bvid);
+    list.insert(0, jsonEncode(v.toJson()));
     if (list.length > 50) list.removeRange(50, list.length);
     await prefs.setStringList('history', list);
   }
@@ -201,16 +297,17 @@ class VideoRepository {
     final prefs = await SharedPreferences.getInstance();
     final list = prefs.getStringList('history') ?? [];
     return list.map((e) {
-      final p = e.split('|');
-      return VideoInfo(bvid: p[0], title: p.length > 1 ? p[1] : '', pic: '', duration: 0, owner: '', view: 0);
-    }).toList();
+      try { return VideoInfo.fromJson(jsonDecode(e) as Map<String, dynamic>); } catch (_) { return null; }
+    }).whereType<VideoInfo>().toList();
   }
 
   Future<void> addWatchLater(VideoInfo v) async {
+    if (!await isWatchLaterEnabled()) return;
     final prefs = await SharedPreferences.getInstance();
     final list = prefs.getStringList('watch_later') ?? [];
-    if (!list.any((e) => e.startsWith('${v.bvid}|'))) {
-      list.add('${v.bvid}|${v.title}');
+    if (!list.any((e) => _bvidOfJson(e) == v.bvid)) {
+      list.add(jsonEncode(v.toJson()));
+      if (list.length > 5) list.removeRange(5, list.length);
       await prefs.setStringList('watch_later', list);
     }
   }
@@ -219,21 +316,25 @@ class VideoRepository {
     final prefs = await SharedPreferences.getInstance();
     final list = prefs.getStringList('watch_later') ?? [];
     return list.map((e) {
-      final p = e.split('|');
-      return VideoInfo(bvid: p[0], title: p.length > 1 ? p[1] : '', pic: '', duration: 0, owner: '', view: 0);
-    }).toList();
+      try { return VideoInfo.fromJson(jsonDecode(e) as Map<String, dynamic>); } catch (_) { return null; }
+    }).whereType<VideoInfo>().toList();
   }
 
   Future<void> removeWatchLater(String bvid) async {
     final prefs = await SharedPreferences.getInstance();
     final list = prefs.getStringList('watch_later') ?? [];
-    list.removeWhere((e) => e.startsWith('$bvid|'));
+    list.removeWhere((e) => _bvidOfJson(e) == bvid);
     await prefs.setStringList('watch_later', list);
+  }
+
+  String? _bvidOfJson(String s) {
+    try { return (jsonDecode(s) as Map<String, dynamic>)['bvid'] as String?; } catch (_) { return null; }
   }
 
   Future<Set<String>> _getBlacklistSet() async {
     final prefs = await SharedPreferences.getInstance();
-    return (prefs.getStringList('blacklist') ?? []).toSet();
+    final list = prefs.getStringList('blacklist') ?? [];
+    return list.map((e) => _bvidOfJson(e)).whereType<String>().toSet();
   }
 
   static String _today() {

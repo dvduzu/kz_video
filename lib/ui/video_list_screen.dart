@@ -18,6 +18,8 @@ class _VideoListScreenState extends State<VideoListScreen> {
   List<VideoInfo>? videos;
   String? error;
   bool loading = true;
+  bool editing = false;
+  final Set<String> selected = {};
 
   @override
   void initState() {
@@ -51,17 +53,28 @@ class _VideoListScreenState extends State<VideoListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('今日精选 · ${_today()}'),
-        actions: [
-          IconButton(icon: const Icon(Icons.history), tooltip: '历史', onPressed: _showHistory),
-          IconButton(icon: const Icon(Icons.bookmarks_outlined), tooltip: '稍后再看', onPressed: _showWatchLater),
-          IconButton(icon: const Icon(Icons.settings_outlined), tooltip: '设置', onPressed: _showSettings),
-          IconButton(
-            icon: Icon(Theme.of(context).brightness == Brightness.dark ? Icons.light_mode : Icons.dark_mode),
-            tooltip: '切换主题',
-            onPressed: widget.onToggleTheme,
-          ),
-        ],
+        title: Text(editing ? '已选择 ${selected.length} 项' : '今日精选 · ${_today()}'),
+        leading: editing
+            ? IconButton(icon: const Icon(Icons.close), onPressed: _exitEditing)
+            : null,
+        actions: editing
+            ? [
+                TextButton.icon(
+                  onPressed: selected.isEmpty ? null : _skipSelected,
+                  icon: const Icon(Icons.block),
+                  label: const Text('跳过'),
+                ),
+              ]
+            : [
+                IconButton(icon: const Icon(Icons.history), tooltip: '历史', onPressed: _showHistory),
+                IconButton(icon: const Icon(Icons.bookmarks_outlined), tooltip: '稍后再看', onPressed: _showWatchLater),
+                IconButton(icon: const Icon(Icons.settings_outlined), tooltip: '设置', onPressed: _showSettings),
+                IconButton(
+                  icon: Icon(Theme.of(context).brightness == Brightness.dark ? Icons.light_mode : Icons.dark_mode),
+                  tooltip: '切换主题',
+                  onPressed: widget.onToggleTheme,
+                ),
+              ],
       ),
       body: Builder(builder: (context) {
         if (loading) return const Center(child: CircularProgressIndicator());
@@ -88,14 +101,27 @@ class _VideoListScreenState extends State<VideoListScreen> {
           separatorBuilder: (_, __) => const SizedBox(height: 12),
           itemBuilder: (context, i) {
             final v = list[i];
+            final isSelected = selected.contains(v.bvid);
             return Card(
               key: ValueKey('${v.bvid}_${Theme.of(context).brightness}'),
               clipBehavior: Clip.antiAlias,
               elevation: 0,
-              color: Theme.of(context).colorScheme.surfaceContainerLow,
+              color: isSelected
+                  ? Theme.of(context).colorScheme.primaryContainer
+                  : Theme.of(context).colorScheme.surfaceContainerLow,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               child: InkWell(
-                onTap: () => widget.onPlay(v),
+                onTap: () {
+                  if (editing) {
+                    setState(() { isSelected ? selected.remove(v.bvid) : selected.add(v.bvid); });
+                  } else {
+                    widget.onPlay(v);
+                  }
+                },
+                onLongPress: () => setState(() {
+                  editing = true;
+                  selected.add(v.bvid);
+                }),
                 child: Padding(
                   padding: const EdgeInsets.all(8),
                   child: Row(
@@ -111,12 +137,9 @@ class _VideoListScreenState extends State<VideoListScreen> {
                         Text(v.owner, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
                         Text('${_duration(v.duration)} · ${_count(v.view)} 播放', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
                       ]))),
-                      IconButton(
-                        icon: const Icon(Icons.close, size: 18),
-                        tooltip: '跳过',
-                        visualDensity: VisualDensity.compact,
-                        onPressed: () => _skip(v),
-                      ),
+                      if (editing)
+                        Icon(isSelected ? Icons.check_circle : Icons.radio_button_unchecked,
+                          color: isSelected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outline),
                     ],
                   ),
                 ),
@@ -130,15 +153,36 @@ class _VideoListScreenState extends State<VideoListScreen> {
     );
   }
 
-  Future<void> _skip(VideoInfo v) async {
-    await VideoRepository.instance().addBlacklist(v.bvid);
+  void _exitEditing() => setState(() { editing = false; selected.clear(); });
+
+  Future<void> _skipSelected() async {
+    final items = (videos ?? []).where((e) => selected.contains(e.bvid)).toList();
+    for (final v in items) {
+      await VideoRepository.instance().addBlacklist(v);
+    }
     if (!mounted) return;
-    setState(() => videos?.removeWhere((e) => e.bvid == v.bvid));
+    setState(() {
+      videos?.removeWhere((e) => selected.contains(e.bvid));
+      selected.clear();
+      editing = false;
+    });
   }
 
-  Future<void> _showHistory() => _showCollection('历史', VideoRepository.instance().getHistory, Icons.history);
+  Future<void> _showHistory() async {
+    if (!await VideoRepository.instance().isHistoryEnabled()) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('历史记录已在设置中关闭')));
+      return;
+    }
+    await _showCollection('历史', VideoRepository.instance().getHistory, Icons.history);
+  }
 
-  Future<void> _showWatchLater() => _showCollection('稍后再看', VideoRepository.instance().getWatchLater, Icons.bookmarks_outlined);
+  Future<void> _showWatchLater() async {
+    if (!await VideoRepository.instance().isWatchLaterEnabled()) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('稍后再看已在设置中关闭')));
+      return;
+    }
+    await _showCollection('稍后再看', VideoRepository.instance().getWatchLater, Icons.bookmarks_outlined);
+  }
 
   Future<void> _showCollection(String title, Future<List<VideoInfo>> Function() loader, IconData icon) async {
     final items = await loader();
@@ -167,19 +211,49 @@ class _VideoListScreenState extends State<VideoListScreen> {
     ));
   }
 
+  Future<void> _showBlacklist() async {
+    final items = await VideoRepository.instance().getBlacklistItems();
+    if (!mounted) return;
+    showModalBottomSheet(context: context, showDragHandle: true, builder: (ctx) => SizedBox(
+      height: MediaQuery.of(ctx).size.height * 0.6,
+      child: Column(children: [
+        ListTile(leading: const Icon(Icons.block), title: Text('黑名单', style: Theme.of(ctx).textTheme.titleMedium)),
+        if (items.isEmpty) const Expanded(child: Center(child: Text('暂无黑名单'))),
+        Expanded(child: ListView.builder(
+          itemCount: items.length,
+          itemBuilder: (_, i) {
+            final v = items[i];
+            return ListTile(
+              title: Text(v.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+              trailing: IconButton(icon: const Icon(Icons.undo), tooltip: '移出黑名单', onPressed: () async {
+                await VideoRepository.instance().removeBlacklist(v.bvid);
+                if (ctx.mounted) Navigator.pop(ctx);
+                _showBlacklist();
+              }),
+            );
+          },
+        )),
+      ]),
+    ));
+  }
+
   Future<void> _showSettings() async {
     final prefs = await SharedPreferences.getInstance();
     final rid = prefs.getInt('setting_rid') ?? 188;
     final minDuration = prefs.getInt('setting_min_duration') ?? 600;
+    final history = prefs.getBool('setting_history') ?? true;
+    final watchLater = prefs.getBool('setting_watch_later') ?? true;
     if (!mounted) return;
-    final result = await showModalBottomSheet<({int rid, int minDuration})>(
-      context: context, showDragHandle: true,
+    final result = await showModalBottomSheet<({int rid, int minDuration, bool history, bool watchLater})>(
+      context: context, showDragHandle: true, isScrollControlled: true,
       builder: (ctx) {
         var selRid = rid;
         var selDur = minDuration;
-        const rids = {188: '科技', 36: '知识', 160: '生活', 201: '纪录片', 4: '游戏', 5: '娱乐'};
+        var selHistory = history;
+        var selWatchLater = watchLater;
+        const rids = {188: '科技', 36: '知识', 160: '生活', 4: '游戏', 5: '娱乐'};
         const durs = {600: '10 分钟', 1200: '20 分钟', 1800: '30 分钟'};
-        return StatefulBuilder(builder: (ctx, setModalState) => Padding(
+        return StatefulBuilder(builder: (ctx, setModalState) => SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
             const Text('分区', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -195,11 +269,34 @@ class _VideoListScreenState extends State<VideoListScreen> {
               selected: selDur == e.key,
               onSelected: (_) => setModalState(() => selDur = e.key),
             )).toList()),
-            const SizedBox(height: 16),
+            const Divider(height: 24),
+            SwitchListTile(
+              title: const Text('历史记录'),
+              subtitle: const Text('记住看过的视频'),
+              value: selHistory,
+              onChanged: (v) => setModalState(() => selHistory = v),
+            ),
+            SwitchListTile(
+              title: const Text('稍后再看'),
+              subtitle: const Text('收藏到稍后队列'),
+              value: selWatchLater,
+              onChanged: (v) => setModalState(() => selWatchLater = v),
+            ),
+            ListTile(
+              leading: const Icon(Icons.block),
+              title: const Text('管理黑名单'),
+              subtitle: const Text('查看/移除已跳过的视频'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _showBlacklist();
+              },
+            ),
+            const SizedBox(height: 8),
             SizedBox(width: double.infinity, child: FilledButton(
-              onPressed: () => Navigator.pop(ctx, (rid: selRid, minDuration: selDur)),
+              onPressed: () => Navigator.pop(ctx, (rid: selRid, minDuration: selDur, history: selHistory, watchLater: selWatchLater)),
               child: const Text('应用'),
             )),
+            const SizedBox(height: 8),
           ]),
         ));
       },
@@ -207,6 +304,8 @@ class _VideoListScreenState extends State<VideoListScreen> {
     if (result != null) {
       await prefs.setInt('setting_rid', result.rid);
       await prefs.setInt('setting_min_duration', result.minDuration);
+      await prefs.setBool('setting_history', result.history);
+      await prefs.setBool('setting_watch_later', result.watchLater);
       await _load(force: true);
     }
   }

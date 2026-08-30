@@ -25,6 +25,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   double speed = 1.0;
   int? currentQn;
   bool ready = false;
+  bool watchLaterEnabled = true;
   static const qnLabels = {80: '高清(1080p)', 64: '标清(720p)', 32: '流畅(480p)'};
 
   @override
@@ -34,6 +35,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     player = Player();
     controller = VideoController(player);
     _listen();
+    VideoRepository.instance().isWatchLaterEnabled().then((v) { if (mounted) setState(() => watchLaterEnabled = v); });
     _load();
   }
 
@@ -174,14 +176,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       itemBuilder: (_) => qnLabels.entries.map((e) => PopupMenuItem(value: e.key, child: Text(e.value, style: const TextStyle(color: Colors.white)))).toList(),
                       child: Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: Text(qnLabels[currentQn ?? 80] ?? '', style: const TextStyle(color: Colors.white, fontSize: 12))),
                     ),
-                    IconButton(
-                      tooltip: '稍后再看',
-                      icon: const Icon(Icons.bookmark_add_outlined, color: Colors.white),
-                      onPressed: () async {
-                        await VideoRepository.instance().addWatchLater(widget.video);
-                        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已加入稍后再看')));
-                      },
-                    ),
+                    if (watchLaterEnabled)
+                      IconButton(
+                        tooltip: '稍后再看',
+                        icon: const Icon(Icons.bookmark_add_outlined, color: Colors.white),
+                        onPressed: () async {
+                          await VideoRepository.instance().addWatchLater(widget.video);
+                          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已加入稍后再看')));
+                        },
+                      ),
                     IconButton(icon: const Icon(Icons.fullscreen, color: Colors.white), onPressed: _toggleOrientation),
                   ]),
                 ),
