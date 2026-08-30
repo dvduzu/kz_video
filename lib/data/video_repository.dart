@@ -133,6 +133,7 @@ class VideoRepository {
   Future<List<VideoInfo>> getDailyVideos({bool force = false}) async {
     final prefs = await SharedPreferences.getInstance();
     final minDuration = prefs.getInt('setting_min_duration') ?? 600;
+    final rid = prefs.getInt('setting_rid') ?? 0;
     final today = _today();
     final key = 'daily_popular_$today';
     final tsKey = 'daily_ts_popular_$today';
@@ -148,30 +149,42 @@ class VideoRepository {
       }
     }
     final blacklist = await _getBlacklistSet();
-    final List<dynamic> rawList = [];
-    for (var attempt = 0; attempt < 3 && rawList.isEmpty; attempt++) {
+    final List<VideoInfo> popular = [];
+    for (var attempt = 0; attempt < 3 && popular.isEmpty; attempt++) {
       for (var pn = 1; pn <= 8; pn++) {
         try {
           final data = await _wbiGet('/x/web-interface/popular', {'pn': pn, 'ps': 30});
-          rawList.addAll((data['data']?['list'] as List?) ?? []);
+          final lst = (data['data']?['list'] as List?) ?? [];
+          popular.addAll(lst.where((e) => rid == 0 || (e['tid'] as int? ?? 0) == rid || (e['tname'] as String? ?? '').isNotEmpty).map((e) => VideoInfo(
+            bvid: e['bvid'] as String,
+            title: e['title'] as String? ?? '',
+            pic: (e['pic'] as String? ?? '').replaceFirst('http://', 'https://'),
+            duration: e['duration'] as int? ?? 0,
+            owner: (e['owner']?['name'] as String?) ?? '',
+            view: (e['stat']?['view'] as int?) ?? 0,
+            pubdate: (e['pubdate'] as int?) ?? 0,
+            mid: (e['owner']?['mid'] as int?) ?? 0,
+          )));
         } catch (_) {}
       }
-      if (rawList.isEmpty) await Future<void>.delayed(Duration(milliseconds: 600 * (attempt + 1)));
+      if (popular.isEmpty) await Future<void>.delayed(Duration(milliseconds: 600 * (attempt + 1)));
     }
-    final videos = rawList.where((e) => (e['duration'] as int? ?? 0) >= minDuration && !blacklist.contains(e['bvid'])).map((e) => VideoInfo(
-      bvid: e['bvid'] as String,
-      title: e['title'] as String? ?? '',
-      pic: (e['pic'] as String? ?? '').replaceFirst('http://', 'https://'),
-      duration: e['duration'] as int? ?? 0,
-      owner: (e['owner']?['name'] as String?) ?? '',
-      view: (e['stat']?['view'] as int?) ?? 0,
-      pubdate: (e['pubdate'] as int?) ?? 0,
-    )).toList();
-    videos.sort((a, b) => b.pubdate.compareTo(a.pubdate));
-    final picked = videos.take(20).toList()..shuffle(Random());
-    final chosen = picked.take(10).toList();
+    final subs = await getSubscriptions();
+    final List<VideoInfo> subVideos = [];
+    for (final sub in subs) {
+      subVideos.addAll(await getUpVideos(sub.mid));
+    }
+    bool isSubVid(String bvid) => subVideos.any((v) => v.bvid == bvid);
+    final popularFiltered = popular.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid) && !isSubVid(v.bvid)).toList()
+      ..sort((a, b) => b.pubdate.compareTo(a.pubdate));
+    final subFiltered = subVideos.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid)).toList()
+      ..sort((a, b) => b.pubdate.compareTo(a.pubdate));
+    final pickedSub = subFiltered.take(4).toList();
+    final pickedPopular = popularFiltered.take(40).toList()..shuffle(Random());
+    final chosen = <VideoInfo>[...pickedSub];
+    chosen.addAll(pickedPopular.where((v) => !chosen.any((c) => c.bvid == v.bvid)).take(10 - chosen.length));
     // ignore: avoid_print
-    print('[kzv] daily minDuration=$minDuration candidates=${videos.length} chosen=${chosen.length}');
+    print('[kzv] daily min=$minDuration sub=${subFiltered.length} popular=${popularFiltered.length} chosen=${chosen.length}');
     if (chosen.isNotEmpty) {
       await prefs.setString(key, jsonEncode(chosen.map((e) => e.toJson()).toList()));
       await prefs.setInt(tsKey, now);
@@ -332,6 +345,60 @@ class VideoRepository {
 
   String? _bvidOfJson(String s) {
     try { return (jsonDecode(s) as Map<String, dynamic>)['bvid'] as String?; } catch (_) { return null; }
+  }
+
+  Future<void> addSubscription(int mid, String name) async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList('subscriptions') ?? [];
+    list.removeWhere((e) => _subMidOfJson(e) == mid);
+    list.add(jsonEncode({'mid': mid, 'name': name}));
+    await prefs.setStringList('subscriptions', list);
+  }
+
+  Future<List<({int mid, String name})>> getSubscriptions() async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList('subscriptions') ?? [];
+    return list.map((e) {
+      try {
+        final m = jsonDecode(e) as Map<String, dynamic>;
+        return (mid: m['mid'] as int, name: m['name'] as String? ?? '');
+      } catch (_) { return null; }
+    }).whereType<({int mid, String name})>().toList();
+  }
+
+  Future<void> removeSubscription(int mid) async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList('subscriptions') ?? [];
+    list.removeWhere((e) => _subMidOfJson(e) == mid);
+    await prefs.setStringList('subscriptions', list);
+  }
+
+  int? _subMidOfJson(String s) {
+    try { return (jsonDecode(s) as Map<String, dynamic>)['mid'] as int?; } catch (_) { return null; }
+  }
+
+  Future<List<VideoInfo>> getUpVideos(int mid) async {
+    try {
+      final data = await _wbiGet('/x/space/wbi/arc/search', {'mid': mid, 'ps': 30, 'tid': 0, 'pn': 1, 'keyword': '', 'order': 'pubdate', 'platform': 'web'});
+      final vlist = (data['data']?['list']?['vlist'] as List?) ?? [];
+      return vlist.map((e) => VideoInfo(
+        bvid: e['bvid'] as String? ?? '',
+        title: e['title'] as String? ?? '',
+        pic: (e['pic'] as String? ?? '').replaceFirst('http://', 'https://'),
+        duration: _parseLength(e['length'] as String? ?? '0'),
+        owner: e['author'] as String? ?? '',
+        view: e['play'] as int? ?? 0,
+        pubdate: e['created'] as int? ?? 0,
+        mid: mid,
+      )).where((v) => v.bvid.isNotEmpty).toList();
+    } catch (_) { return []; }
+  }
+
+  int _parseLength(String l) {
+    final parts = l.split(':');
+    var sec = 0;
+    for (final p in parts) { sec = sec * 60 + (int.tryParse(p) ?? 0); }
+    return sec;
   }
 
   Future<Set<String>> _getBlacklistSet() async {

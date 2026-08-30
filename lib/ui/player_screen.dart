@@ -177,12 +177,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       child: Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: Text(qnLabels[currentQn ?? 80] ?? '', style: const TextStyle(color: Colors.white, fontSize: 12))),
                     ),
                     if (watchLaterEnabled)
+IconButton(
+                      tooltip: '稍后再看',
+                      icon: const Icon(Icons.bookmark_add_outlined, color: Colors.white),
+                      onPressed: () async {
+                        await VideoRepository.instance().addWatchLater(widget.video);
+                        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已加入稍后再看')));
+                      },
+                    ),
+                    if (widget.video.mid > 0)
                       IconButton(
-                        tooltip: '稍后再看',
-                        icon: const Icon(Icons.bookmark_add_outlined, color: Colors.white),
+                        tooltip: '关注UP',
+                        icon: const Icon(Icons.person_add_alt, color: Colors.white),
                         onPressed: () async {
-                          await VideoRepository.instance().addWatchLater(widget.video);
-                          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已加入稍后再看')));
+                          await VideoRepository.instance().addSubscription(widget.video.mid, widget.video.owner);
+                          if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已关注 ${widget.video.owner}')));
                         },
                       ),
                     IconButton(icon: const Icon(Icons.fullscreen, color: Colors.white), onPressed: _toggleOrientation),

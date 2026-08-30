@@ -20,6 +20,13 @@ class _VideoListScreenState extends State<VideoListScreen> {
   bool loading = true;
   bool editing = false;
   final Set<String> selected = {};
+  final TextEditingController _subInput = TextEditingController();
+
+  @override
+  void dispose() {
+    _subInput.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -218,6 +225,62 @@ class _VideoListScreenState extends State<VideoListScreen> {
     ));
   }
 
+  Future<void> _showSubscriptions() async {
+    final subs = await VideoRepository.instance().getSubscriptions();
+    if (!mounted) return;
+    showModalBottomSheet(context: context, showDragHandle: true, isScrollControlled: true, builder: (ctx) => Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+      child: SizedBox(
+        height: MediaQuery.of(ctx).size.height * 0.65,
+        child: Column(children: [
+          ListTile(leading: const Icon(Icons.person_add_alt), title: Text('订阅管理', style: Theme.of(ctx).textTheme.titleMedium)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(children: [
+              Expanded(child: TextField(
+                controller: _subInput,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(hintText: '输入 UP 主 mid (数字ID)', isDense: true),
+                onSubmitted: (_) => _addSub(ctx),
+              )),
+              const SizedBox(width: 8),
+              FilledButton(onPressed: () => _addSub(ctx), child: const Text('添加')),
+            ]),
+          ),
+          const SizedBox(height: 8),
+          if (subs.isEmpty) const Expanded(child: Center(child: Text('暂无订阅'))),
+          Expanded(child: ListView.builder(
+            itemCount: subs.length,
+            itemBuilder: (_, i) {
+              final s = subs[i];
+              return ListTile(
+                title: Text(s.name.isEmpty ? 'UP ${s.mid}' : s.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                subtitle: Text('mid: ${s.mid}'),
+                trailing: IconButton(icon: const Icon(Icons.delete_outline), onPressed: () async {
+                  await VideoRepository.instance().removeSubscription(s.mid);
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  _showSubscriptions();
+                }),
+              );
+            },
+          )),
+        ]),
+      ),
+    ));
+  }
+
+  Future<void> _addSub(BuildContext ctx) async {
+    final mid = int.tryParse(_subInput.text.trim());
+    if (mid == null || mid <= 0) {
+      if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('请输入有效的 mid')));
+      return;
+    }
+    await VideoRepository.instance().addSubscription(mid, '');
+    _subInput.clear();
+    if (ctx.mounted) Navigator.pop(ctx);
+    _showSubscriptions();
+  }
+
   Future<void> _showBlacklist() async {
     final items = await VideoRepository.instance().getBlacklistItems();
     if (!mounted) return;
@@ -247,21 +310,28 @@ class _VideoListScreenState extends State<VideoListScreen> {
   Future<void> _showSettings() async {
     final prefs = await SharedPreferences.getInstance();
     final minDuration = prefs.getInt('setting_min_duration') ?? 600;
+    final rid = prefs.getInt('setting_rid') ?? 0;
     final history = prefs.getBool('setting_history') ?? true;
     final watchLater = prefs.getBool('setting_watch_later') ?? true;
     if (!mounted) return;
-    final result = await showModalBottomSheet<({int minDuration, bool history, bool watchLater})>(
+    final result = await showModalBottomSheet<({int minDuration, int rid, bool history, bool watchLater})>(
       context: context, showDragHandle: true, isScrollControlled: true,
       builder: (ctx) {
         var selDur = minDuration;
+        var selRid = rid;
         var selHistory = history;
         var selWatchLater = watchLater;
         const durs = {600: '10 分钟', 1200: '20 分钟', 1800: '30 分钟'};
+        const rids = {0: '全部', 188: '科技', 36: '知识', 160: '生活', 4: '游戏', 5: '娱乐'};
         return StatefulBuilder(builder: (ctx, setModalState) => SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('数据源', style: TextStyle(fontWeight: FontWeight.bold)),
-            const Padding(padding: EdgeInsets.symmetric(vertical: 4), child: Text('综合热门（最新投稿）', style: TextStyle(color: Colors.grey))),
+            const Text('分区', style: TextStyle(fontWeight: FontWeight.bold)),
+            Wrap(spacing: 8, children: rids.entries.map((e) => ChoiceChip(
+              label: Text(e.value),
+              selected: selRid == e.key,
+              onSelected: (_) => setModalState(() => selRid = e.key),
+            )).toList()),
             const SizedBox(height: 16),
             const Text('长视频阈值', style: TextStyle(fontWeight: FontWeight.bold)),
             Wrap(spacing: 8, children: durs.entries.map((e) => ChoiceChip(
@@ -270,6 +340,12 @@ class _VideoListScreenState extends State<VideoListScreen> {
               onSelected: (_) => setModalState(() => selDur = e.key),
             )).toList()),
             const Divider(height: 24),
+            ListTile(
+              leading: const Icon(Icons.person_add_alt),
+              title: const Text('订阅管理'),
+              subtitle: const Text('关注 UP 主，推荐会包含他们的新视频'),
+              onTap: () { Navigator.pop(ctx); _showSubscriptions(); },
+            ),
             SwitchListTile(
               title: const Text('历史记录'),
               subtitle: const Text('记住看过的视频'),
@@ -293,7 +369,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
             ),
             const SizedBox(height: 8),
             SizedBox(width: double.infinity, child: FilledButton(
-              onPressed: () => Navigator.pop(ctx, (minDuration: selDur, history: selHistory, watchLater: selWatchLater)),
+              onPressed: () => Navigator.pop(ctx, (minDuration: selDur, rid: selRid, history: selHistory, watchLater: selWatchLater)),
               child: const Text('应用'),
             )),
             const SizedBox(height: 8),
@@ -303,6 +379,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
     );
     if (result != null) {
       await prefs.setInt('setting_min_duration', result.minDuration);
+      await prefs.setInt('setting_rid', result.rid);
       await prefs.setBool('setting_history', result.history);
       await prefs.setBool('setting_watch_later', result.watchLater);
       await _load(force: true);
