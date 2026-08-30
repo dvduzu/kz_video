@@ -20,13 +20,6 @@ class _VideoListScreenState extends State<VideoListScreen> {
   bool loading = true;
   bool editing = false;
   final Set<String> selected = {};
-  final TextEditingController _subInput = TextEditingController();
-
-  @override
-  void dispose() {
-    _subInput.dispose();
-    super.dispose();
-  }
 
   @override
   void initState() {
@@ -228,57 +221,28 @@ class _VideoListScreenState extends State<VideoListScreen> {
   Future<void> _showSubscriptions() async {
     final subs = await VideoRepository.instance().getSubscriptions();
     if (!mounted) return;
-    showModalBottomSheet(context: context, showDragHandle: true, isScrollControlled: true, builder: (ctx) => Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-      child: SizedBox(
-        height: MediaQuery.of(ctx).size.height * 0.65,
-        child: Column(children: [
-          ListTile(leading: const Icon(Icons.person_add_alt), title: Text('订阅管理', style: Theme.of(ctx).textTheme.titleMedium)),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(children: [
-              Expanded(child: TextField(
-                controller: _subInput,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(hintText: '输入 UP 主 mid (数字ID)', isDense: true),
-                onSubmitted: (_) => _addSub(ctx),
-              )),
-              const SizedBox(width: 8),
-              FilledButton(onPressed: () => _addSub(ctx), child: const Text('添加')),
-            ]),
-          ),
-          const SizedBox(height: 8),
-          if (subs.isEmpty) const Expanded(child: Center(child: Text('暂无订阅'))),
-          Expanded(child: ListView.builder(
-            itemCount: subs.length,
-            itemBuilder: (_, i) {
-              final s = subs[i];
-              return ListTile(
-                title: Text(s.name.isEmpty ? 'UP ${s.mid}' : s.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-                subtitle: Text('mid: ${s.mid}'),
-                trailing: IconButton(icon: const Icon(Icons.delete_outline), onPressed: () async {
-                  await VideoRepository.instance().removeSubscription(s.mid);
-                  if (ctx.mounted) Navigator.pop(ctx);
-                  _showSubscriptions();
-                }),
-              );
-            },
-          )),
-        ]),
-      ),
+    showModalBottomSheet(context: context, showDragHandle: true, builder: (ctx) => SizedBox(
+      height: MediaQuery.of(ctx).size.height * 0.6,
+      child: Column(children: [
+        ListTile(leading: const Icon(Icons.person_add_alt), title: Text('订阅管理 (${subs.length}/10)', style: Theme.of(ctx).textTheme.titleMedium)),
+        if (subs.isEmpty) const Expanded(child: Center(child: Text('暂无订阅，播放页可关注 UP 主'))),
+        Expanded(child: ListView.builder(
+          itemCount: subs.length,
+          itemBuilder: (_, i) {
+            final s = subs[i];
+            return ListTile(
+              title: Text(s.name.isEmpty ? 'UP ${s.mid}' : s.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+              subtitle: Text('mid: ${s.mid}'),
+              trailing: IconButton(icon: const Icon(Icons.delete_outline), onPressed: () async {
+                await VideoRepository.instance().removeSubscription(s.mid);
+                if (ctx.mounted) Navigator.pop(ctx);
+                _showSubscriptions();
+              }),
+            );
+          },
+        )),
+      ]),
     ));
-  }
-
-  Future<void> _addSub(BuildContext ctx) async {
-    final mid = int.tryParse(_subInput.text.trim());
-    if (mid == null || mid <= 0) {
-      if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('请输入有效的 mid')));
-      return;
-    }
-    await VideoRepository.instance().addSubscription(mid, '');
-    _subInput.clear();
-    if (ctx.mounted) Navigator.pop(ctx);
-    _showSubscriptions();
   }
 
   Future<void> _showBlacklist() async {

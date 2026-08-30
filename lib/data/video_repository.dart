@@ -155,7 +155,7 @@ class VideoRepository {
         try {
           final data = await _wbiGet('/x/web-interface/popular', {'pn': pn, 'ps': 30});
           final lst = (data['data']?['list'] as List?) ?? [];
-          popular.addAll(lst.where((e) => rid == 0 || (e['tid'] as int? ?? 0) == rid || (e['tname'] as String? ?? '').isNotEmpty).map((e) => VideoInfo(
+          popular.addAll(lst.where((e) => rid == 0 || (e['tid'] as int? ?? 0) == rid).map((e) => VideoInfo(
             bvid: e['bvid'] as String,
             title: e['title'] as String? ?? '',
             pic: (e['pic'] as String? ?? '').replaceFirst('http://', 'https://'),
@@ -347,12 +347,20 @@ class VideoRepository {
     try { return (jsonDecode(s) as Map<String, dynamic>)['bvid'] as String?; } catch (_) { return null; }
   }
 
-  Future<void> addSubscription(int mid, String name) async {
+  Future<bool> addSubscription(int mid, String name) async {
     final prefs = await SharedPreferences.getInstance();
     final list = prefs.getStringList('subscriptions') ?? [];
-    list.removeWhere((e) => _subMidOfJson(e) == mid);
+    if (list.any((e) => _subMidOfJson(e) == mid)) return true;
+    if (list.length >= 10) return false;
     list.add(jsonEncode({'mid': mid, 'name': name}));
     await prefs.setStringList('subscriptions', list);
+    return true;
+  }
+
+  Future<bool> isSubscribed(int mid) async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList('subscriptions') ?? [];
+    return list.any((e) => _subMidOfJson(e) == mid);
   }
 
   Future<List<({int mid, String name})>> getSubscriptions() async {

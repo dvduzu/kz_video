@@ -26,6 +26,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   int? currentQn;
   bool ready = false;
   bool watchLaterEnabled = true;
+  bool subscribed = false;
   static const qnLabels = {80: '高清(1080p)', 64: '标清(720p)', 32: '流畅(480p)'};
 
   @override
@@ -36,6 +37,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     controller = VideoController(player);
     _listen();
     VideoRepository.instance().isWatchLaterEnabled().then((v) { if (mounted) setState(() => watchLaterEnabled = v); });
+    if (widget.video.mid > 0) {
+      VideoRepository.instance().isSubscribed(widget.video.mid).then((v) { if (mounted) setState(() => subscribed = v); });
+    }
     _load();
   }
 
@@ -187,11 +191,26 @@ IconButton(
                     ),
                     if (widget.video.mid > 0)
                       IconButton(
-                        tooltip: '关注UP',
-                        icon: const Icon(Icons.person_add_alt, color: Colors.white),
+                        tooltip: subscribed ? '已关注' : '关注UP',
+                        icon: Icon(subscribed ? Icons.person : Icons.person_add_alt, color: subscribed ? Theme.of(context).colorScheme.primary : Colors.white),
                         onPressed: () async {
-                          await VideoRepository.instance().addSubscription(widget.video.mid, widget.video.owner);
-                          if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已关注 ${widget.video.owner}')));
+                          if (subscribed) {
+                            await VideoRepository.instance().removeSubscription(widget.video.mid);
+                            if (mounted) {
+                              setState(() => subscribed = false);
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已取消关注')));
+                            }
+                            return;
+                          }
+                          final ok = await VideoRepository.instance().addSubscription(widget.video.mid, widget.video.owner);
+                          if (mounted) {
+                            if (ok) {
+                              setState(() => subscribed = true);
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已关注 ${widget.video.owner}')));
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('订阅已满 10 人，请到设置→订阅管理移除一个')));
+                            }
+                          }
                         },
                       ),
                     IconButton(icon: const Icon(Icons.fullscreen, color: Colors.white), onPressed: _toggleOrientation),
