@@ -49,6 +49,13 @@ class _VideoListScreenState extends State<VideoListScreen> {
 
   String _count(int c) => c >= 10000 ? '${(c / 10000).toStringAsFixed(1)}万' : '$c';
 
+  String _pubdate(int ts) {
+    if (ts <= 0) return '';
+    final t = DateTime.fromMillisecondsSinceEpoch(ts * 1000);
+    final now = DateTime.now();
+    return t.year == now.year ? '${t.month}月${t.day}日' : '${t.year}年${t.month}月${t.day}日';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -135,7 +142,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
                         Text(v.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Theme.of(context).colorScheme.onSurface)),
                         const SizedBox(height: 4),
                         Text(v.owner, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                        Text('${_duration(v.duration)} · ${_count(v.view)} 播放', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                        Text('${_pubdate(v.pubdate)} · ${_duration(v.duration)} · ${_count(v.view)} 播放', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
                       ]))),
                       if (editing)
                         Icon(isSelected ? Icons.check_circle : Icons.radio_button_unchecked,
@@ -239,29 +246,22 @@ class _VideoListScreenState extends State<VideoListScreen> {
 
   Future<void> _showSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    final rid = prefs.getInt('setting_rid') ?? 188;
     final minDuration = prefs.getInt('setting_min_duration') ?? 600;
     final history = prefs.getBool('setting_history') ?? true;
     final watchLater = prefs.getBool('setting_watch_later') ?? true;
     if (!mounted) return;
-    final result = await showModalBottomSheet<({int rid, int minDuration, bool history, bool watchLater})>(
+    final result = await showModalBottomSheet<({int minDuration, bool history, bool watchLater})>(
       context: context, showDragHandle: true, isScrollControlled: true,
       builder: (ctx) {
-        var selRid = rid;
         var selDur = minDuration;
         var selHistory = history;
         var selWatchLater = watchLater;
-        const rids = {188: '科技', 36: '知识', 160: '生活', 4: '游戏', 5: '娱乐'};
         const durs = {600: '10 分钟', 1200: '20 分钟', 1800: '30 分钟'};
         return StatefulBuilder(builder: (ctx, setModalState) => SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('分区', style: TextStyle(fontWeight: FontWeight.bold)),
-            Wrap(spacing: 8, children: rids.entries.map((e) => ChoiceChip(
-              label: Text(e.value),
-              selected: selRid == e.key,
-              onSelected: (_) => setModalState(() => selRid = e.key),
-            )).toList()),
+            const Text('数据源', style: TextStyle(fontWeight: FontWeight.bold)),
+            const Padding(padding: EdgeInsets.symmetric(vertical: 4), child: Text('综合热门（最新投稿）', style: TextStyle(color: Colors.grey))),
             const SizedBox(height: 16),
             const Text('长视频阈值', style: TextStyle(fontWeight: FontWeight.bold)),
             Wrap(spacing: 8, children: durs.entries.map((e) => ChoiceChip(
@@ -293,7 +293,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
             ),
             const SizedBox(height: 8),
             SizedBox(width: double.infinity, child: FilledButton(
-              onPressed: () => Navigator.pop(ctx, (rid: selRid, minDuration: selDur, history: selHistory, watchLater: selWatchLater)),
+              onPressed: () => Navigator.pop(ctx, (minDuration: selDur, history: selHistory, watchLater: selWatchLater)),
               child: const Text('应用'),
             )),
             const SizedBox(height: 8),
@@ -302,7 +302,6 @@ class _VideoListScreenState extends State<VideoListScreen> {
       },
     );
     if (result != null) {
-      await prefs.setInt('setting_rid', result.rid);
       await prefs.setInt('setting_min_duration', result.minDuration);
       await prefs.setBool('setting_history', result.history);
       await prefs.setBool('setting_watch_later', result.watchLater);

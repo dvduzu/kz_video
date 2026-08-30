@@ -132,11 +132,10 @@ class VideoRepository {
 
   Future<List<VideoInfo>> getDailyVideos({bool force = false}) async {
     final prefs = await SharedPreferences.getInstance();
-    final rid = (prefs.getInt('setting_rid') ?? 188) == 201 ? 188 : (prefs.getInt('setting_rid') ?? 188);
     final minDuration = prefs.getInt('setting_min_duration') ?? 600;
     final today = _today();
-    final key = 'daily_${rid}_$today';
-    final tsKey = 'daily_ts_${rid}_$today';
+    final key = 'daily_popular_$today';
+    final tsKey = 'daily_ts_popular_$today';
     final now = DateTime.now().millisecondsSinceEpoch;
     if (!force) {
       final cachedTs = prefs.getInt(tsKey);
@@ -149,16 +148,15 @@ class VideoRepository {
       }
     }
     final blacklist = await _getBlacklistSet();
-    List<dynamic> rawList = [];
-    for (var attempt = 0; attempt < 3; attempt++) {
-      final data = await _wbiGet('/x/web-interface/ranking/v2', {'rid': rid});
-      rawList = (data['data']?['list'] as List?) ?? [];
-      if (rawList.isNotEmpty) break;
-      await Future<void>.delayed(Duration(milliseconds: 500 * (attempt + 1)));
-    }
-    if (rawList.isEmpty && rid != 188) {
-      final data = await _wbiGet('/x/web-interface/ranking/v2', {'rid': 188});
-      rawList = (data['data']?['list'] as List?) ?? [];
+    final List<dynamic> rawList = [];
+    for (var attempt = 0; attempt < 3 && rawList.isEmpty; attempt++) {
+      for (var pn = 1; pn <= 8; pn++) {
+        try {
+          final data = await _wbiGet('/x/web-interface/popular', {'pn': pn, 'ps': 30});
+          rawList.addAll((data['data']?['list'] as List?) ?? []);
+        } catch (_) {}
+      }
+      if (rawList.isEmpty) await Future<void>.delayed(Duration(milliseconds: 600 * (attempt + 1)));
     }
     final videos = rawList.where((e) => (e['duration'] as int? ?? 0) >= minDuration && !blacklist.contains(e['bvid'])).map((e) => VideoInfo(
       bvid: e['bvid'] as String,
@@ -167,13 +165,18 @@ class VideoRepository {
       duration: e['duration'] as int? ?? 0,
       owner: (e['owner']?['name'] as String?) ?? '',
       view: (e['stat']?['view'] as int?) ?? 0,
-    )).toList()..shuffle(Random());
-    final picked = videos.take(10).toList();
-    if (picked.isNotEmpty) {
-      await prefs.setString(key, jsonEncode(picked.map((e) => e.toJson()).toList()));
+      pubdate: (e['pubdate'] as int?) ?? 0,
+    )).toList();
+    videos.sort((a, b) => b.pubdate.compareTo(a.pubdate));
+    final picked = videos.take(20).toList()..shuffle(Random());
+    final chosen = picked.take(10).toList();
+    // ignore: avoid_print
+    print('[kzv] daily minDuration=$minDuration candidates=${videos.length} chosen=${chosen.length}');
+    if (chosen.isNotEmpty) {
+      await prefs.setString(key, jsonEncode(chosen.map((e) => e.toJson()).toList()));
       await prefs.setInt(tsKey, now);
     }
-    return picked;
+    return chosen;
   }
 
   Future<String> getPlayUrl(String bvid, {int? qn}) async {
