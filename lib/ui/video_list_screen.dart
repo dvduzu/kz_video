@@ -9,8 +9,9 @@ class VideoListScreen extends StatefulWidget {
   final void Function(VideoInfo) onPlay;
   final ThemeMode mode;
   final VoidCallback onToggleTheme;
-  final VoidCallback onOpenThemeSettings;
-  const VideoListScreen({super.key, required this.onPlay, required this.mode, required this.onToggleTheme, required this.onOpenThemeSettings});
+  final Color? seed;
+  final Future<void> Function(ThemeMode, Color?) onSetTheme;
+  const VideoListScreen({super.key, required this.onPlay, required this.mode, required this.onToggleTheme, required this.seed, required this.onSetTheme});
 
   @override
   State<VideoListScreen> createState() => _VideoListScreenState();
@@ -89,11 +90,6 @@ class _VideoListScreenState extends State<VideoListScreen> {
                 IconButton(icon: const Icon(Icons.history), tooltip: '历史', onPressed: _showHistory),
                 IconButton(icon: const Icon(Icons.bookmarks_outlined), tooltip: '稍后再看', onPressed: _showWatchLater),
                 IconButton(icon: const Icon(Icons.settings_outlined), tooltip: '设置', onPressed: _showSettings),
-                IconButton(
-                  icon: Icon(Theme.of(context).brightness == Brightness.dark ? Icons.light_mode : Icons.dark_mode),
-                  tooltip: '切换主题',
-                  onPressed: widget.onOpenThemeSettings,
-                ),
               ],
       ),
       body: Builder(builder: (context) {
@@ -355,6 +351,40 @@ class _VideoListScreenState extends State<VideoListScreen> {
     )));
   }
 
+  void _showColorSettings() {
+    showDialog(context: context, builder: (ctx) => StatefulBuilder(builder: (ctx, setDlg) => AlertDialog(
+      title: const Text('颜色设置'),
+      content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('深浅模式', style: TextStyle(fontWeight: FontWeight.bold)),
+        Wrap(spacing: 8, children: {
+          ThemeMode.system: '跟随系统',
+          ThemeMode.light: '浅色',
+          ThemeMode.dark: '深色',
+        }.entries.map((e) => ChoiceChip(
+          label: Text(e.value),
+          selected: widget.mode == e.key,
+          onSelected: (_) { setDlg(() {}); widget.onSetTheme(e.key, widget.seed); },
+        )).toList()),
+        const SizedBox(height: 16),
+        const Text('色调', style: TextStyle(fontWeight: FontWeight.bold)),
+        Wrap(spacing: 8, children: [
+          ChoiceChip(
+            avatar: const Icon(Icons.brightness_auto, size: 16),
+            label: const Text('跟随系统'),
+            selected: widget.seed == null,
+            onSelected: (_) { setDlg(() {}); widget.onSetTheme(widget.mode, null); },
+          ),
+          ...aospSeeds.entries.map((e) => ChoiceChip(
+            avatar: CircleAvatar(backgroundColor: e.value, radius: 8),
+            label: Text(e.value == Colors.blueGrey ? '灰' : e.key),
+            selected: widget.seed == e.value,
+            onSelected: (_) { setDlg(() {}); widget.onSetTheme(widget.mode, e.value); },
+          )),
+        ]),
+      ])),
+    )));
+  }
+
   Future<void> _showLogin() async {
     final repo = VideoRepository.instance();
     final loggedIn = repo.isLoggedIn;
@@ -533,7 +563,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
               leading: const Icon(Icons.palette_outlined),
               title: const Text('颜色设置'),
               subtitle: const Text('深浅模式 / 色调'),
-              onTap: () { Navigator.pop(ctx); widget.onOpenThemeSettings(); },
+              onTap: () { Navigator.pop(ctx); _showColorSettings(); },
             ),
             ListTile(
               leading: Icon(VideoRepository.instance().isLoggedIn ? Icons.account_circle : Icons.login),
@@ -609,7 +639,6 @@ class _VideoListScreenState extends State<VideoListScreen> {
       await prefs.setInt('setting_min_duration', result.minDuration);
       await prefs.setString('setting_rid', result.rid);
       await prefs.setBool('setting_history', result.history);
-      await prefs.setBool('setting_watch_later', result.watchLater);
       await prefs.setBool('setting_watch_later', result.watchLater);
       await prefs.setString('setting_source_mode', result.sourceMode);
       await prefs.setBool('setting_source_mode_enabled', result.showModeSel);

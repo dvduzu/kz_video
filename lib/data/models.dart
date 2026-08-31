@@ -1,3 +1,18 @@
+import 'package:flutter/material.dart';
+
+const aospSeeds = <String, Color>{
+  '蓝': Color(0xFF6750A4),
+  '紫': Colors.deepPurple,
+  '靛蓝': Colors.indigo,
+  '青': Colors.teal,
+  '绿': Colors.green,
+  '橙': Colors.orange,
+  '红': Colors.red,
+  '粉': Colors.pink,
+  '棕': Colors.brown,
+  '灰': Colors.blueGrey,
+};
+
 class VideoInfo {
   final String bvid;
   final String title;
