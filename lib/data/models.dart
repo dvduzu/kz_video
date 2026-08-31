@@ -29,3 +29,12 @@ class SubtitleCue {
   final String content;
   SubtitleCue({required this.from, required this.to, required this.content});
 }
+
+class SearchUser {
+  final int mid;
+  final String uname;
+  final String sign;
+  final int fans;
+  final String face;
+  SearchUser({required this.mid, required this.uname, required this.sign, required this.fans, required this.face});
+}

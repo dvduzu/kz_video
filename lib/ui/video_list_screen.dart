@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/models.dart';
 import '../data/video_repository.dart';
@@ -230,49 +231,114 @@ class _VideoListScreenState extends State<VideoListScreen> {
   }
 
   Future<void> _showSubscriptions() async {
-    final subs = await VideoRepository.instance().getSubscriptions();
-    final manualOn = await (await SharedPreferences.getInstance()).getBool('setting_manual_mid') ?? false;
+    var followed = await VideoRepository.instance().getSubscriptions();
     if (!mounted) return;
-    final manualCtl = TextEditingController();
+    final searchCtl = TextEditingController();
+    final addCtl = TextEditingController();
+    var results = <SearchUser>[];
+    var searching = false;
+    var followedFilter = '';
+    var tabIndex = 0;
     showModalBottomSheet(context: context, showDragHandle: true, isScrollControlled: true, builder: (ctx) => Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-      child: SizedBox(
-        height: MediaQuery.of(ctx).size.height * 0.6,
+      child: DefaultTabController(length: 2, child: StatefulBuilder(builder: (ctx, setSheet) => SizedBox(
+        height: MediaQuery.of(ctx).size.height * 0.7,
         child: Column(children: [
-          ListTile(leading: const Icon(Icons.person_add_alt), title: Text('订阅管理 (${subs.length}/50)', style: Theme.of(ctx).textTheme.titleMedium)),
-          if (manualOn)
+          ListTile(leading: const Icon(Icons.person_add_alt), title: Text('订阅管理 (${followed.length}/50)', style: Theme.of(ctx).textTheme.titleMedium)),
+          TabBar(
+            onTap: (i) => setSheet(() => tabIndex = i),
+            tabs: const [Tab(text: '已关注'), Tab(text: '添加UP')],
+          ),
+          if (tabIndex == 0) ...[
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: TextField(
+                controller: searchCtl,
+                decoration: const InputDecoration(hintText: '搜索已关注的 UP', isDense: true, prefixIcon: Icon(Icons.search, size: 20)),
+                onChanged: (v) => setSheet(() => followedFilter = v.trim()),
+              ),
+            ),
+            Expanded(child: ListView.builder(
+              itemCount: followed.length,
+              itemBuilder: (_, i) {
+                final s = followed[i];
+                if (followedFilter.isNotEmpty && !s.name.contains(followedFilter)) return const SizedBox.shrink();
+                return ListTile(
+                  title: Text(s.name.isEmpty ? 'UP ${s.mid}' : s.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  subtitle: Text('mid: ${s.mid}'),
+                  trailing: IconButton(icon: const Icon(Icons.delete_outline), onPressed: () async {
+                    await VideoRepository.instance().removeSubscription(s.mid);
+                    setSheet(() => followed.removeWhere((f) => f.mid == s.mid));
+                  }),
+                );
+              },
+            )),
+          ] else ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               child: Row(children: [
                 Expanded(child: TextField(
-                  controller: manualCtl,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(hintText: '输入 UP 主 mid (数字ID)', isDense: true),
-                  onSubmitted: (_) => _manualAddSub(ctx, manualCtl),
+                  controller: addCtl,
+                  decoration: const InputDecoration(hintText: '搜索站内 UP 主', isDense: true, prefixIcon: Icon(Icons.search, size: 20)),
+                  onSubmitted: (_) async {
+                    setSheet(() { searching = true; results = []; });
+                    results = await VideoRepository.instance().searchUsers(addCtl.text.trim());
+                    if (ctx.mounted) setSheet(() { searching = false; });
+                  },
                 )),
                 const SizedBox(width: 8),
-                FilledButton(onPressed: () => _manualAddSub(ctx, manualCtl), child: const Text('添加')),
+                IconButton(icon: const Icon(Icons.search), onPressed: () async {
+                  setSheet(() { searching = true; results = []; });
+                  results = await VideoRepository.instance().searchUsers(addCtl.text.trim());
+                  if (ctx.mounted) setSheet(() { searching = false; });
+                }),
               ]),
             ),
-          if (subs.isEmpty) const Expanded(child: Center(child: Text('暂无订阅，播放页可关注 UP 主'))),
-          Expanded(child: ListView.builder(
-            itemCount: subs.length,
-            itemBuilder: (_, i) {
-              final s = subs[i];
-              return ListTile(
-                title: Text(s.name.isEmpty ? 'UP ${s.mid}' : s.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-                subtitle: Text('mid: ${s.mid}'),
-                trailing: IconButton(icon: const Icon(Icons.delete_outline), onPressed: () async {
-                  await VideoRepository.instance().removeSubscription(s.mid);
-                  if (ctx.mounted) Navigator.pop(ctx);
-                  _showSubscriptions();
-                }),
-              );
-            },
-          )),
+            if (searching)
+              const Expanded(child: Center(child: CircularProgressIndicator()))
+            else if (results.isNotEmpty)
+              Expanded(child: ListView.builder(
+                itemCount: results.length,
+                itemBuilder: (_, i) {
+                  final u = results[i];
+                  final isFollowed = followed.any((f) => f.mid == u.mid);
+                  return ListTile(
+                    title: Text(u.uname, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    subtitle: Text('粉丝 ${u.fans} · ${u.sign}', maxLines: 1, overflow: TextOverflow.ellipsis),
+                    trailing: isFollowed
+                        ? Icon(Icons.check_circle, color: Theme.of(ctx).colorScheme.primary)
+                        : IconButton(icon: const Icon(Icons.add), tooltip: '关注', onPressed: () async {
+                            final ok = await VideoRepository.instance().addSubscription(u.mid, u.uname, face: u.face);
+                            if (ctx.mounted) {
+                              if (ok) {
+                                setSheet(() {
+                                  followed.insert(0, (mid: u.mid, name: u.uname, face: u.face));
+                                });
+                                ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+                                  content: Text('已关注 ${u.uname}'),
+                                  duration: const Duration(milliseconds: 1500),
+                                  behavior: SnackBarBehavior.floating,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                                ));
+                              } else {
+                                ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+                                  content: const Text('订阅已满 50 人'),
+                                  duration: Duration(milliseconds: 1500),
+                                  behavior: SnackBarBehavior.floating,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                                ));
+                              }
+                            }
+                          }),
+                  );
+                },
+              ))
+            else
+              const Expanded(child: Center(child: Text('搜索添加 UP 主'))),
+          ],
         ]),
-      ),
-    ));
+      )),
+    )));
   }
 
   Future<void> _showLogin() async {
@@ -292,6 +358,19 @@ class _VideoListScreenState extends State<VideoListScreen> {
       ));
       return;
     }
+    showDialog(context: context, builder: (ctx) => AlertDialog(
+      title: const Text('登录'),
+      content: const Text('选择登录方式：'),
+      actions: [
+        TextButton(onPressed: () { Navigator.pop(ctx); _showQrLogin(); }, child: const Text('扫码登录')),
+        TextButton(onPressed: () { Navigator.pop(ctx); _showCookieLogin(); }, child: const Text('Cookie 登录')),
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+      ],
+    ));
+  }
+
+  void _showCookieLogin() {
+    final repo = VideoRepository.instance();
     final ctl = TextEditingController();
     showDialog(context: context, builder: (ctx) => AlertDialog(
       title: const Text('Cookie 登录'),
@@ -315,6 +394,58 @@ class _VideoListScreenState extends State<VideoListScreen> {
         }, child: const Text('登录')),
       ],
     ));
+  }
+
+  void _showQrLogin() {
+    final repo = VideoRepository.instance();
+    final qrUrl = ValueNotifier<String?>(null);
+    final status = ValueNotifier('正在获取二维码…');
+    showDialog(context: context, builder: (ctx) => ValueListenableBuilder<String?>(
+      valueListenable: qrUrl,
+      builder: (ctx, url, _) => AlertDialog(
+        title: const Text('扫码登录'),
+        content: SingleChildScrollView(child: SizedBox(
+          width: 260,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            if (url != null) ...[
+              QrImageView(data: url, size: 200),
+              const SizedBox(height: 8),
+            ],
+            ValueListenableBuilder<String>(valueListenable: status, builder: (ctx, s, _) => Text(s, style: const TextStyle(fontSize: 13))),
+          ]),
+        )),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('关闭')),
+        ],
+      ),
+    ));
+    Future<void> start() async {
+      final gen = await repo.webQrGenerate();
+      if (gen == null) {
+        status.value = '获取二维码失败';
+        return;
+      }
+      qrUrl.value = gen.url;
+      status.value = '请用 B 站 App 扫码';
+      var tries = 0;
+      while (tries < 90) {
+        await Future<void>.delayed(const Duration(seconds: 2));
+        if (mounted) {
+          final ok = await repo.webQrPoll(gen.key);
+          if (ok) {
+            status.value = '登录成功';
+            await Future<void>.delayed(const Duration(milliseconds: 500));
+            if (context.mounted) Navigator.pop(context);
+            return;
+          }
+          tries++;
+        } else {
+          return;
+        }
+      }
+      status.value = '二维码已过期，请重新获取';
+    }
+    start();
   }
 
   Future<void> _showBlacklist() async {
@@ -389,7 +520,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
             ListTile(
               leading: Icon(VideoRepository.instance().isLoggedIn ? Icons.account_circle : Icons.login),
               title: Text(VideoRepository.instance().isLoggedIn ? '登录状态：${VideoRepository.instance().loginName}' : '登录'),
-              subtitle: const Text('Cookie 登录'),
+              subtitle: const Text('扫码登录 / Cookie 登录'),
               onTap: () { Navigator.pop(ctx); _showLogin(); },
             ),
             ListTile(

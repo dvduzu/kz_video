@@ -153,6 +153,45 @@ class VideoRepository {
     return map;
   }
 
+  Future<({String key, String url})?> webQrGenerate() async {
+    try {
+      final resp = await dio.get('https://passport.bilibili.com/x/passport-login/web/qrcode/generate');
+      final data = resp.data as Map<String, dynamic>;
+      final d = data['data'] as Map<String, dynamic>?;
+      final key = d?['qrcode_key'] as String?;
+      final url = d?['url'] as String?;
+      if (key == null || key.isEmpty) return null;
+      return (key: key, url: url ?? '');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<bool> webQrPoll(String key) async {
+    try {
+      final resp = await dio.get('https://passport.bilibili.com/x/passport-login/web/qrcode/poll', queryParameters: {'qrcode_key': key});
+      final data = resp.data as Map<String, dynamic>;
+      final d = data['data'] as Map<String, dynamic>?;
+      final code = d?['code'] as int?;
+      final values = resp.headers.map['set-cookie'];
+      // ignore: avoid_print
+      print('[kzv] qr poll code=$code setCookie=${values?.length}');
+      if (code == 0) {
+        final values = resp.headers.map['set-cookie'];
+        if (values != null && values.isNotEmpty) {
+          final cookieHeader = values.join('; ');
+          if (cookieHeader.contains('SESSDATA')) {
+            final ok = await loginWithCookie(cookieHeader);
+            return ok;
+          }
+        }
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<bool> loginWithCookie(String cookieHeader) async {
     await _ensureBuvid();
     final parsed = _parseCookie(cookieHeader);
@@ -485,12 +524,12 @@ class VideoRepository {
     try { return (jsonDecode(s) as Map<String, dynamic>)['bvid'] as String?; } catch (_) { return null; }
   }
 
-  Future<bool> addSubscription(int mid, String name) async {
+  Future<bool> addSubscription(int mid, String name, {String face = ''}) async {
     final prefs = await SharedPreferences.getInstance();
     final list = prefs.getStringList('subscriptions') ?? [];
     if (list.any((e) => _subMidOfJson(e) == mid)) return true;
     if (list.length >= 50) return false;
-    list.add(jsonEncode({'mid': mid, 'name': name}));
+    list.add(jsonEncode({'mid': mid, 'name': name, 'face': face}));
     await prefs.setStringList('subscriptions', list);
     return true;
   }
@@ -501,15 +540,15 @@ class VideoRepository {
     return list.any((e) => _subMidOfJson(e) == mid);
   }
 
-  Future<List<({int mid, String name})>> getSubscriptions() async {
+  Future<List<({int mid, String name, String face})>> getSubscriptions() async {
     final prefs = await SharedPreferences.getInstance();
     final list = prefs.getStringList('subscriptions') ?? [];
     return list.map((e) {
       try {
         final m = jsonDecode(e) as Map<String, dynamic>;
-        return (mid: m['mid'] as int, name: m['name'] as String? ?? '');
+        return (mid: m['mid'] as int, name: m['name'] as String? ?? '', face: (m['face'] as String?) ?? '');
       } catch (_) { return null; }
-    }).whereType<({int mid, String name})>().toList();
+    }).whereType<({int mid, String name, String face})>().toList();
   }
 
   Future<void> removeSubscription(int mid) async {
@@ -521,6 +560,30 @@ class VideoRepository {
 
   int? _subMidOfJson(String s) {
     try { return (jsonDecode(s) as Map<String, dynamic>)['mid'] as int?; } catch (_) { return null; }
+  }
+
+  Future<List<SearchUser>> searchUsers(String keyword) async {
+    try {
+      final data = await _wbiGet('/x/web-interface/wbi/search/type', {
+        'search_type': 'bili_user',
+        'keyword': keyword,
+        'page': 1,
+        'page_size': 20,
+      });
+      final result = data['data']?['result'] as List? ?? [];
+      return result.map((e) {
+        final m = e as Map<String, dynamic>;
+        return SearchUser(
+          mid: m['mid'] as int? ?? 0,
+          uname: m['uname'] as String? ?? '',
+          sign: m['usign'] as String? ?? '',
+          fans: m['fans'] as int? ?? 0,
+          face: ((m['upic'] as String?) ?? '').replaceFirst('http://', 'https://'),
+        );
+      }).where((u) => u.mid > 0).toList();
+    } catch (_) {
+      return [];
+    }
   }
 
   Future<List<VideoInfo>> getUpVideos(int mid) async {
