@@ -135,10 +135,10 @@ class VideoRepository {
     final prefs = await SharedPreferences.getInstance();
     final minDuration = prefs.getInt('setting_min_duration') ?? 600;
     final ridKey = prefs.getString('setting_rid') ?? '';
-    final ridTids = _ridTids(ridKey);
+    final ridMain = _ridMain(ridKey);
     final today = _today();
-    final key = 'daily_popular_$today';
-    final tsKey = 'daily_ts_popular_$today';
+    final key = 'daily_${ridMain}_$today';
+    final tsKey = 'daily_ts_${ridMain}_$today';
     final now = DateTime.now().millisecondsSinceEpoch;
     if (!force) {
       final cachedTs = prefs.getInt(tsKey);
@@ -152,12 +152,31 @@ class VideoRepository {
     }
     final blacklist = await _getBlacklistSet();
     final List<VideoInfo> popular = [];
+    List<Map<String, dynamic>> rawVideos(List<dynamic> list) => list.map((e) => e as Map<String, dynamic>).toList();
     for (var attempt = 0; attempt < 3 && popular.isEmpty; attempt++) {
-      for (var pn = 1; pn <= 8; pn++) {
+      if (ridMain == 0) {
+        for (var pn = 1; pn <= 8; pn++) {
+          try {
+            final data = await _wbiGet('/x/web-interface/popular', {'pn': pn, 'ps': 30});
+            final lst = (data['data']?['list'] as List?) ?? [];
+            popular.addAll(rawVideos(lst).map((e) => VideoInfo(
+              bvid: e['bvid'] as String,
+              title: e['title'] as String? ?? '',
+              pic: (e['pic'] as String? ?? '').replaceFirst('http://', 'https://'),
+              duration: e['duration'] as int? ?? 0,
+              owner: (e['owner']?['name'] as String?) ?? '',
+              view: (e['stat']?['view'] as int?) ?? 0,
+              pubdate: (e['pubdate'] as int?) ?? 0,
+              mid: (e['owner']?['mid'] as int?) ?? 0,
+              tid: (e['tid'] as int?) ?? 0,
+            )));
+          } catch (_) {}
+        }
+      } else {
         try {
-          final data = await _wbiGet('/x/web-interface/popular', {'pn': pn, 'ps': 30});
+          final data = await _wbiGet('/x/web-interface/ranking/v2', {'rid': ridMain, 'type': 'all'});
           final lst = (data['data']?['list'] as List?) ?? [];
-          popular.addAll(lst.map((e) => VideoInfo(
+          popular.addAll(rawVideos(lst).map((e) => VideoInfo(
             bvid: e['bvid'] as String,
             title: e['title'] as String? ?? '',
             pic: (e['pic'] as String? ?? '').replaceFirst('http://', 'https://'),
@@ -179,13 +198,9 @@ class VideoRepository {
     }
     bool isSubVid(String bvid) => subVideos.any((v) => v.bvid == bvid);
     final mode = prefs.getString('setting_source_mode') ?? 'mixed';
-    final popularFiltered = popular.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid) && !isSubVid(v.bvid) && (ridTids.isEmpty || ridTids.contains(v.tid))).toList()
+    final popularFiltered = popular.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid) && !isSubVid(v.bvid)).toList()
       ..sort((a, b) => b.pubdate.compareTo(a.pubdate));
-    var pool = popularFiltered;
-    if (pool.length < 10 && ridTids.isNotEmpty) {
-      pool = popular.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid) && !isSubVid(v.bvid)).toList()
-        ..sort((a, b) => b.pubdate.compareTo(a.pubdate));
-    }
+    final pool = popularFiltered;
     final subFiltered = subVideos.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid)).toList()
       ..sort((a, b) => b.pubdate.compareTo(a.pubdate));
     final List<VideoInfo> chosen;
@@ -461,14 +476,15 @@ class VideoRepository {
     return sec;
   }
 
-  Set<int> _ridTids(String key) {
+  int _ridMain(String key) {
     return switch (key) {
-      'tech' => {201, 231, 232, 208, 228},
-      'edu' => {124, 228, 229, 208},
-      'life' => {21, 76, 122, 164, 176, 212, 213, 215, 218, 219, 220},
-      'game' => {17, 65, 171, 172, 173, 136},
-      'ent' => {22, 85, 138, 241, 242, 157, 158, 20, 199, 200, 193},
-      _ => <int>{},
+      'tech' => 1012,
+      'edu' => 1010,
+      'life' => 1020,
+      'game' => 1008,
+      'ent' => 1002,
+      'music' => 1003,
+      _ => 0,
     };
   }
 

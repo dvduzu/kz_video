@@ -322,14 +322,14 @@ class _VideoListScreenState extends State<VideoListScreen> {
         var selMode = sourceMode;
         var selShowMode = showModeSel;
         const durs = {600: '10 分钟', 1200: '20 分钟', 1800: '30 分钟'};
-        const rids = {'': '全部', 'tech': '科技', 'edu': '知识', 'life': '生活', 'game': '游戏', 'ent': '娱乐'};
+        const rids = {'': '全部', 'tech': '科技', 'edu': '知识', 'life': '美食', 'game': '游戏', 'ent': '娱乐', 'music': '音乐'};
         return StatefulBuilder(builder: (ctx, setModalState) => SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('分区（弱倾向）', style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text('分区', style: TextStyle(fontWeight: FontWeight.bold)),
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 2),
-              child: Text('受限于匿名访问，分区为弱倾向，不保证覆盖该分区全部内容', style: TextStyle(fontSize: 12, color: Colors.grey)),
+              child: Text('按分区排行拉取，非本地过滤', style: TextStyle(fontSize: 12, color: Colors.grey)),
             ),
             Wrap(spacing: 8, children: rids.entries.map((e) => ChoiceChip(
               label: Text(e.value),
