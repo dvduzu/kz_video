@@ -275,6 +275,48 @@ class _VideoListScreenState extends State<VideoListScreen> {
     ));
   }
 
+  Future<void> _showLogin() async {
+    final repo = VideoRepository.instance();
+    final loggedIn = repo.isLoggedIn;
+    if (loggedIn) {
+      showDialog(context: context, builder: (ctx) => AlertDialog(
+        title: const Text('登录状态'),
+        content: Text('已登录：${repo.loginName.isEmpty ? 'B站账号' : repo.loginName}'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('关闭')),
+          TextButton(onPressed: () async {
+            await repo.logout();
+            if (ctx.mounted) Navigator.pop(ctx);
+          }, child: const Text('退出登录')),
+        ],
+      ));
+      return;
+    }
+    final ctl = TextEditingController();
+    showDialog(context: context, builder: (ctx) => AlertDialog(
+      title: const Text('Cookie 登录'),
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+        const Text('从已登录 B 站网页的浏览器复制 Cookie（需含 SESSDATA），粘贴到下方：', style: TextStyle(fontSize: 13)),
+        const SizedBox(height: 12),
+        TextField(
+          controller: ctl,
+          maxLines: 4,
+          decoration: const InputDecoration(hintText: '粘贴 Cookie 字符串', border: OutlineInputBorder()),
+        ),
+      ]),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+        FilledButton(onPressed: () async {
+          final ok = await repo.loginWithCookie(ctl.text.trim());
+          if (ctx.mounted) {
+            Navigator.pop(ctx);
+            ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(ok ? '登录成功' : '登录失败，请检查 Cookie 是否含 SESSDATA')));
+          }
+        }, child: const Text('登录')),
+      ],
+    ));
+  }
+
   Future<void> _showBlacklist() async {
     final items = await VideoRepository.instance().getBlacklistItems();
     if (!mounted) return;
@@ -344,6 +386,12 @@ class _VideoListScreenState extends State<VideoListScreen> {
               onSelected: (_) => setModalState(() => selDur = e.key),
             )).toList()),
             const Divider(height: 24),
+            ListTile(
+              leading: Icon(VideoRepository.instance().isLoggedIn ? Icons.account_circle : Icons.login),
+              title: Text(VideoRepository.instance().isLoggedIn ? '登录状态：${VideoRepository.instance().loginName}' : '登录'),
+              subtitle: const Text('Cookie 登录'),
+              onTap: () { Navigator.pop(ctx); _showLogin(); },
+            ),
             ListTile(
               leading: const Icon(Icons.person_add_alt),
               title: const Text('订阅管理'),

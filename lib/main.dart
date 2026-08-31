@@ -14,6 +14,7 @@ void main() async {
   final cookiePath = '${Directory.systemTemp.path}/kzv_cookies';
   await Directory(cookiePath).create(recursive: true);
   VideoRepository.init(VideoRepository.create(cookiePath));
+  VideoRepository.instance().restoreLogin();
   runApp(const MyApp());
 }
 

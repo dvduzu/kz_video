@@ -29,6 +29,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool watchLaterEnabled = true;
   bool subscribed = false;
   bool watchLaterAdded = false;
+  bool subtitleOn = false;
+  String? _subtitleVtt;
   static const qnLabels = {80: '高清(1080p)', 64: '标清(720p)', 32: '流畅(480p)'};
 
   @override
@@ -95,10 +97,28 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (mounted) setState(() { ready = true; currentQn = qn; });
       _retryCount = 0;
       VideoRepository.instance().addHistory(widget.video);
+      _loadSubtitle();
       _startHideTimer();
     } catch (e) {
       if (mounted) setState(() => error = e.toString());
     }
+  }
+
+  Future<void> _loadSubtitle() async {
+    final sub = await VideoRepository.instance().getSubtitles(widget.video.bvid);
+    if (!mounted || sub == null) return;
+    setState(() { _subtitleVtt = sub.vtt; });
+  }
+
+  void _toggleSubtitle() {
+    if (_subtitleVtt == null) return;
+    subtitleOn = !subtitleOn;
+    if (subtitleOn) {
+      player.setSubtitleTrack(SubtitleTrack.data(_subtitleVtt!, title: '字幕'));
+    } else {
+      player.setSubtitleTrack(SubtitleTrack.no());
+    }
+    setState(() {});
   }
 
   void _startHideTimer() {
@@ -262,6 +282,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       itemBuilder: (_) => qnLabels.entries.map((e) => PopupMenuItem(value: e.key, child: Text(e.value, style: const TextStyle(color: Colors.white)))).toList(),
                       child: Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: Text(qnLabels[currentQn ?? 80] ?? '', style: const TextStyle(color: Colors.white, fontSize: 12))),
                     ),
+                    if (_subtitleVtt != null)
+                      IconButton(
+                        tooltip: subtitleOn ? '关闭字幕' : '字幕',
+                        icon: Icon(subtitleOn ? Icons.closed_caption : Icons.closed_caption_off, color: subtitleOn ? Theme.of(context).colorScheme.primary : Colors.white),
+                        onPressed: _toggleSubtitle,
+                      ),
                     if (watchLaterEnabled)
 IconButton(
                       tooltip: watchLaterAdded ? '取消稍后再看' : '稍后再看',

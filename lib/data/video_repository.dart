@@ -119,6 +119,94 @@ class VideoRepository {
     }
   }
 
+  bool _loggedIn = false;
+  String _loginName = '';
+
+  bool get isLoggedIn => _loggedIn;
+  String get loginName => _loginName;
+
+  Map<String, String> _parseCookie(String cookieHeader) {
+    final map = <String, String>{};
+    for (final part in cookieHeader.split(';')) {
+      final i = part.indexOf('=');
+      if (i > 0) {
+        final k = part.substring(0, i).trim();
+        var v = part.substring(i + 1).trim();
+        if (v.length >= 2 && (v.startsWith('"') && v.endsWith('"') || v.startsWith("'") && v.endsWith("'"))) {
+          v = v.substring(1, v.length - 1);
+        }
+        if (k.isNotEmpty) map[k] = v;
+      }
+    }
+    return map;
+  }
+
+  Future<bool> loginWithCookie(String cookieHeader) async {
+    await _ensureBuvid();
+    final parsed = _parseCookie(cookieHeader);
+    if (!parsed.containsKey('SESSDATA') || parsed['SESSDATA']!.isEmpty) {
+      return false;
+    }
+    final merged = Map<String, String>.from(_fullCookies ?? {});
+    merged.addAll(parsed);
+    _fullCookies = merged;
+    final ok = await _validateLogin();
+    if (ok) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('login_cookie', cookieHeader);
+    }
+    return ok;
+  }
+
+  Future<bool> _validateLogin() async {
+    try {
+      final hasSessdata = _fullCookies?.containsKey('SESSDATA') == true;
+      // ignore: avoid_print
+      print('[kzv] validate: hasSESSDATA=$hasSessdata keys=${_fullCookies?.keys.join(',')}');
+      final cookieHeader = _fullCookies?.entries.map((e) => '${e.key}=${e.value}').join('; ');
+      final resp = await dio.get('https://api.bilibili.com/x/web-interface/nav', options: Options(headers: {
+        if (cookieHeader != null) 'Cookie': cookieHeader,
+      }));
+      final data = resp.data as Map<String, dynamic>;
+      // ignore: avoid_print
+      print('[kzv] nav code=${data['code']} isLogin=${data['data']?['isLogin']} uname=${data['data']?['uname']}');
+      final isLogin = data['data']?['isLogin'] == true;
+      if (isLogin) {
+        _loggedIn = true;
+        _loginName = (data['data']?['uname'] as String?) ?? '';
+      } else {
+        _loggedIn = false;
+        _loginName = '';
+      }
+      return isLogin;
+    } catch (e) {
+      // ignore: avoid_print
+      print('[kzv] validate error: $e');
+      return false;
+    }
+  }
+
+  Future<void> restoreLogin() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString('login_cookie');
+    if (saved != null && saved.isNotEmpty) {
+      await loginWithCookie(saved);
+    }
+  }
+
+  Future<void> logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('login_cookie');
+    _loggedIn = false;
+    _loginName = '';
+    if (_fullCookies != null) {
+      _fullCookies!.remove('SESSDATA');
+      _fullCookies!.remove('bili_jct');
+      _fullCookies!.remove('DedeUserID');
+      _fullCookies!.remove('DedeUserID__ckMd5');
+    }
+  }
+
   Future<Map<String, dynamic>> _wbiGet(String path, Map<String, dynamic> params) async {
     await _ensureBuvid();
     final mixinKey = await _getMixinKey();
@@ -500,6 +588,46 @@ class VideoRepository {
     final today = _today();
     final count = prefs.getInt('refresh_count_$today') ?? 0;
     await prefs.setInt('refresh_count_$today', count + 1);
+  }
+
+  Future<({String vtt, String lanDoc})?> getSubtitles(String bvid) async {
+    try {
+      final viewData = await _wbiGet('/x/web-interface/view', {'bvid': bvid});
+      final cid = viewData['data']?['cid'];
+      if (cid == null) return null;
+      final playData = await _wbiGet('/x/player/wbi/v2', {'bvid': bvid, 'cid': cid, 'fnval': 16});
+      final subtitle = playData['data']?['subtitle'] as Map<String, dynamic>?;
+      final list = subtitle?['subtitles'] as List? ?? [];
+      Map<String, dynamic>? zh;
+      for (final s in list.cast<Map<String, dynamic>>()) {
+        final lan = (s['lan'] as String?) ?? '';
+        if (lan.contains('zh')) { zh = s; break; }
+      }
+      zh ??= list.isNotEmpty ? list.first as Map<String, dynamic> : null;
+      if (zh == null) return null;
+      final url = (zh['subtitle_url'] as String?) ?? '';
+      if (url.isEmpty) return null;
+      final resp = await dio.get('https:$url');
+      final body = (resp.data as Map<String, dynamic>?)?['body'] as List? ?? [];
+      final sb = StringBuffer('WEBVTT\n\n');
+      for (var i = 0; i < body.length; i++) {
+        final item = body[i] as Map<String, dynamic>;
+        final from = (item['from'] as num).toDouble();
+        final to = (item['to'] as num).toDouble();
+        sb.write('${_vttTime(from)} --> ${_vttTime(to)}\n${(item['content'] as String).trim()}\n\n');
+      }
+      return (vtt: sb.toString(), lanDoc: (zh['lan_doc'] as String?) ?? '字幕');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _vttTime(double sec) {
+    final h = (sec ~/ 3600).toString().padLeft(2, '0');
+    final m = ((sec % 3600) ~/ 60).toString().padLeft(2, '0');
+    final s = (sec % 60).floor().toString().padLeft(2, '0');
+    final ms = ((sec * 1000) % 1000).round().toString().padLeft(3, '0');
+    return '$h:$m:$s.$ms';
   }
 
   Future<Set<String>> _getBlacklistSet() async {
