@@ -22,3 +22,10 @@ class VideoInfo {
   );
   Map<String, dynamic> toJson() => {'bvid': bvid, 'title': title, 'pic': pic, 'duration': duration, 'owner': owner, 'view': view, 'pubdate': pubdate, 'mid': mid, 'tid': tid};
 }
+
+class SubtitleCue {
+  final double from;
+  final double to;
+  final String content;
+  SubtitleCue({required this.from, required this.to, required this.content});
+}

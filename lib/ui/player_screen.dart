@@ -30,10 +30,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool subscribed = false;
   bool watchLaterAdded = false;
   bool subtitleOn = false;
-  String? _subtitleVtt;
+  List<SubtitleCue>? _subtitleCues;
   double subtitleFontSize = 32;
   double subtitlePos = 24;
-  bool subtitleBg = true;
+  bool subtitleSemi = false;
   static const qnLabels = {80: '高清(1080p)', 64: '标清(720p)', 32: '流畅(480p)'};
 
   @override
@@ -78,10 +78,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _load({int? qn}) async {
     setState(() { error = null; });
     try {
+      int? resumeMs;
       if (ready) {
-        await VideoRepository.instance().saveProgress(widget.video.bvid, player.state.position.inMilliseconds, player.state.duration.inMilliseconds);
+        resumeMs = player.state.position.inMilliseconds;
+        await VideoRepository.instance().saveProgress(widget.video.bvid, resumeMs, player.state.duration.inMilliseconds);
         await player.stop();
         setState(() => ready = false);
+        setState(() { _subtitleCues = null; });
       }
       final url = await VideoRepository.instance().getPlayUrl(widget.video.bvid, qn: qn);
       final buvid3 = VideoRepository.instance().buvid3;
@@ -92,9 +95,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
       };
       await player.open(Media(url, httpHeaders: headers));
       await player.setRate(speed);
-      final progress = await VideoRepository.instance().getProgress(widget.video.bvid);
-      if (progress != null && progress.durationMs > 0 && progress.positionMs < progress.durationMs) {
-        await player.seek(Duration(milliseconds: progress.positionMs));
+      final seekTarget = resumeMs ?? (await VideoRepository.instance().getProgress(widget.video.bvid))?.positionMs;
+      if (seekTarget != null && seekTarget > 0) {
+        for (var i = 0; i < 20 && player.state.duration.inMilliseconds <= 0; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        }
+        await player.seek(Duration(milliseconds: seekTarget));
       }
       await player.play();
       if (mounted) setState(() { ready = true; currentQn = qn; });
@@ -108,24 +114,25 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _loadSubtitle() async {
-    final sub = await VideoRepository.instance().getSubtitles(widget.video.bvid);
-    if (!mounted || sub == null) return;
+    final cues = await VideoRepository.instance().getSubtitles(widget.video.bvid);
+    if (!mounted || cues == null || cues.isEmpty) return;
     // ignore: avoid_print
-    print('[kzv] subtitle loaded len=${sub.vtt.length} lan=${sub.lanDoc}');
-    setState(() { _subtitleVtt = sub.vtt; });
+    print('[kzv] subtitle loaded cues=${cues.length}');
+    setState(() { _subtitleCues = cues; });
   }
 
-  void _toggleSubtitle() {
-    if (_subtitleVtt == null) return;
-    subtitleOn = !subtitleOn;
-    if (subtitleOn) {
-      // ignore: avoid_print
-      print('[kzv] set subtitle track len=${_subtitleVtt!.length}');
-      player.setSubtitleTrack(SubtitleTrack.data(_subtitleVtt!, title: '字幕'));
-    } else {
-      player.setSubtitleTrack(SubtitleTrack.no());
-    }
+  void _setSubtitle(bool on) {
+    subtitleOn = on;
     setState(() {});
+  }
+
+  String? _currentSubtitle() {
+    if (!subtitleOn || _subtitleCues == null) return null;
+    final pos = player.state.position.inMilliseconds / 1000.0;
+    for (final c in _subtitleCues!) {
+      if (pos >= c.from && pos <= c.to) return c.content;
+    }
+    return null;
   }
 
   void _showSubtitleMenu() {
@@ -136,7 +143,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           SwitchListTile(
             title: const Text('显示字幕'),
             value: subtitleOn,
-            onChanged: (v) { subtitleOn = v; setModalState(() {}); setState(() {}); },
+            onChanged: (v) { _setSubtitle(v); setModalState(() {}); },
           ),
           const Text('字号', style: TextStyle(fontWeight: FontWeight.bold)),
           Slider(
@@ -152,8 +159,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
           ),
           SwitchListTile(
             title: const Text('半透明背景'),
-            value: subtitleBg,
-            onChanged: (v) { subtitleBg = v; setModalState(() {}); setState(() {}); },
+            value: subtitleSemi,
+            onChanged: (v) { subtitleSemi = v; setModalState(() {}); setState(() {}); },
           ),
         ]),
       ));
@@ -236,16 +243,32 @@ class _PlayerScreenState extends State<PlayerScreen> {
           if (mounted) setState(() => longPressAccel = false);
         },
         child: Stack(children: [
-          Center(child: Video(controller: controller, controls: NoVideoControls, subtitleViewConfiguration: SubtitleViewConfiguration(
-            visible: subtitleOn,
-            style: TextStyle(
-              fontSize: subtitleFontSize,
-              color: Colors.white,
-              height: 1.4,
-              backgroundColor: subtitleBg ? Colors.black54 : Colors.transparent,
+          Center(child: Video(controller: controller, controls: NoVideoControls)),
+          AnimatedOpacity(
+            opacity: showControls ? 0.4 : 0,
+            duration: const Duration(milliseconds: 200),
+            child: IgnorePointer(child: Container(color: Colors.black)),
+          ),
+          if (_currentSubtitle() case final sub?)
+            IgnorePointer(
+              child: SafeArea(
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Padding(
+                    padding: EdgeInsets.only(bottom: subtitlePos, left: 16, right: 16),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(color: subtitleSemi ? Colors.black54 : Colors.black, borderRadius: BorderRadius.circular(4)),
+                      child: Text(
+                        sub,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: subtitleFontSize, color: Colors.white, height: 1.4),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
-            padding: EdgeInsets.fromLTRB(16, 0, 16, subtitlePos),
-          ))),
           AnimatedOpacity(
             opacity: showControls ? 1 : 0,
             duration: const Duration(milliseconds: 200),
@@ -304,7 +327,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
               SafeArea(
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                  child: Row(children: [
+                  child: Listener(
+                    onPointerDown: (_) => _startHideTimer(),
+                    child: Row(children: [
                     IconButton(
                       icon: Icon(playing ? Icons.pause : Icons.play_arrow, color: Colors.white),
                       onPressed: () { playing ? player.pause() : player.play(); },
@@ -313,7 +338,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     const Text(' / ', style: TextStyle(color: Colors.white70, fontSize: 12)),
                     Text(_format(duration), style: const TextStyle(color: Colors.white70, fontSize: 12)),
                     const SizedBox(width: 8),
-                    Expanded(child: _ProgressBar(player: player, position: position, duration: duration)),
+                    Expanded(child: _ProgressBar(player: player, position: position, duration: duration, onInteract: _startHideTimer)),
                     PopupMenuButton<double>(
                       tooltip: '倍速',
                       color: Colors.black87,
@@ -330,7 +355,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       itemBuilder: (_) => qnLabels.entries.map((e) => PopupMenuItem(value: e.key, child: Text(e.value, style: const TextStyle(color: Colors.white)))).toList(),
                       child: Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: Text(qnLabels[currentQn ?? 80] ?? '', style: const TextStyle(color: Colors.white, fontSize: 12))),
                     ),
-                    if (_subtitleVtt != null)
+                    if (_subtitleCues != null && _subtitleCues!.isNotEmpty)
                       IconButton(
                         tooltip: subtitleOn ? '关闭字幕' : '字幕',
                         icon: Icon(subtitleOn ? Icons.closed_caption : Icons.closed_caption_off, color: subtitleOn ? Theme.of(context).colorScheme.primary : Colors.white),
@@ -382,6 +407,7 @@ IconButton(
                       ),
                     IconButton(icon: const Icon(Icons.fullscreen, color: Colors.white), onPressed: _toggleOrientation),
                   ]),
+                    ),
                 ),
               ),
             ]),
@@ -396,7 +422,8 @@ class _ProgressBar extends StatefulWidget {
   final Player player;
   final Duration position;
   final Duration duration;
-  const _ProgressBar({required this.player, required this.position, required this.duration});
+  final VoidCallback onInteract;
+  const _ProgressBar({required this.player, required this.position, required this.duration, required this.onInteract});
   @override
   State<_ProgressBar> createState() => _ProgressBarState();
 }
@@ -418,34 +445,29 @@ class _ProgressBarState extends State<_ProgressBar> {
     final dragging = _dragMs != null;
     final display = (dragging ? _dragMs! : pos).clamp(0.0, max);
     return Stack(
-      alignment: Alignment.topCenter,
-      children: [
-        SliderTheme(
-          data: SliderThemeData(
-            trackHeight: 3,
-            thumbShape: RoundSliderThumbShape(enabledThumbRadius: dragging ? 8 : 6),
-            overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+        alignment: Alignment.topCenter,
+        children: [
+          SliderTheme(
+            data: SliderThemeData(
+              trackHeight: 3,
+              thumbShape: RoundSliderThumbShape(enabledThumbRadius: dragging ? 8 : 6),
+              overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+            ),
+            child: Slider(
+              value: max <= 0 ? 0.0 : display,
+              max: max <= 0 ? 1.0 : max,
+              activeColor: Theme.of(context).colorScheme.primary,
+              inactiveColor: Colors.white24,
+              onChangeStart: (v) { setState(() => _dragMs = v); widget.onInteract(); },
+              onChanged: (v) { setState(() => _dragMs = v); widget.onInteract(); },
+              onChangeEnd: (v) {
+                widget.player.seek(Duration(milliseconds: v.round()));
+                setState(() => _dragMs = null);
+                widget.onInteract();
+              },
+            ),
           ),
-          child: Slider(
-            value: max <= 0 ? 0.0 : display,
-            max: max <= 0 ? 1.0 : max,
-            activeColor: Theme.of(context).colorScheme.primary,
-            inactiveColor: Colors.white24,
-            onChangeStart: (v) => setState(() => _dragMs = v),
-            onChanged: (v) => setState(() => _dragMs = v),
-            onChangeEnd: (v) {
-              widget.player.seek(Duration(milliseconds: v.round()));
-              setState(() => _dragMs = null);
-            },
-          ),
-        ),
-        if (dragging)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.7), borderRadius: BorderRadius.circular(6)),
-            child: Text(_fmt(Duration(milliseconds: display.round())), style: const TextStyle(color: Colors.white, fontSize: 14)),
-          ),
-      ],
-    );
+        ],
+      );
   }
 }

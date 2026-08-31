@@ -1,12 +1,9 @@
 import 'dart:convert';
 import 'dart:math';
-import 'package:cookie_jar/cookie_jar.dart';
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
-import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'app_sign.dart';
-import 'cookie_jar_sync.dart';
 import 'models.dart';
 import 'wbi_sign.dart';
 
@@ -17,12 +14,10 @@ class VideoRepository {
   static void init(VideoRepository repo) => _instance = repo;
 
   final Dio dio;
-  final SyncMemoryCookieJar cookieJar;
 
-  VideoRepository._(this.dio, this.cookieJar);
+  VideoRepository._(this.dio);
 
   factory VideoRepository.create(String cookiePath) {
-    final jar = SyncMemoryCookieJar();
     final dio = Dio(BaseOptions(
       baseUrl: 'https://api.bilibili.com',
       headers: {
@@ -32,9 +27,8 @@ class VideoRepository {
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 10),
     ));
-    dio.interceptors.add(CookieManager(jar));
     dio.interceptors.add(LogInterceptor(requestBody: false, responseBody: false, requestHeader: false));
-    return VideoRepository._(dio, jar);
+    return VideoRepository._(dio);
   }
 
   String? _mixinKey;
@@ -590,7 +584,7 @@ class VideoRepository {
     await prefs.setInt('refresh_count_$today', count + 1);
   }
 
-  Future<({String vtt, String lanDoc})?> getSubtitles(String bvid) async {
+  Future<List<SubtitleCue>?> getSubtitles(String bvid) async {
     try {
       final viewData = await _wbiGet('/x/web-interface/view', {'bvid': bvid});
       final cid = viewData['data']?['cid'];
@@ -609,25 +603,17 @@ class VideoRepository {
       if (url.isEmpty) return null;
       final resp = await dio.get('https:$url');
       final body = (resp.data as Map<String, dynamic>?)?['body'] as List? ?? [];
-      final sb = StringBuffer('WEBVTT\n\n');
-      for (var i = 0; i < body.length; i++) {
-        final item = body[i] as Map<String, dynamic>;
-        final from = (item['from'] as num).toDouble();
-        final to = (item['to'] as num).toDouble();
-        sb.write('${_vttTime(from)} --> ${_vttTime(to)}\n${(item['content'] as String).trim()}\n\n');
-      }
-      return (vtt: sb.toString(), lanDoc: (zh['lan_doc'] as String?) ?? '字幕');
+      return body.map((e) {
+        final m = e as Map<String, dynamic>;
+        return SubtitleCue(
+          from: (m['from'] as num).toDouble(),
+          to: (m['to'] as num).toDouble(),
+          content: (m['content'] as String).trim(),
+        );
+      }).toList();
     } catch (_) {
       return null;
     }
-  }
-
-  String _vttTime(double sec) {
-    final h = (sec ~/ 3600).toString().padLeft(2, '0');
-    final m = ((sec % 3600) ~/ 60).toString().padLeft(2, '0');
-    final s = (sec % 60).floor().toString().padLeft(2, '0');
-    final ms = ((sec * 1000) % 1000).round().toString().padLeft(3, '0');
-    return '$h:$m:$s.$ms';
   }
 
   Future<Set<String>> _getBlacklistSet() async {
