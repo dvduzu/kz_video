@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'app_sign.dart';
 import 'models.dart';
@@ -52,6 +53,7 @@ class VideoRepository {
   }
 
   bool _buvidReady = false;
+  int _biliTicketExpires = 0;
   Map<String, String>? _fullCookies;
 
   String _hmacSha256(String key, String message) => Hmac(sha256, utf8.encode(key)).convert(utf8.encode(message)).toString();
@@ -76,7 +78,16 @@ class VideoRepository {
   }
 
   Future<void> _ensureBuvid() async {
-    if (_buvidReady) return;
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    if (_buvidReady && (_biliTicketExpires == 0 || now < _biliTicketExpires)) return;
+    _buvidReady = false;
+    final savedLogin = <String, String>{};
+    if (_fullCookies != null) {
+      for (final k in ['SESSDATA', 'bili_jct', 'DedeUserID', 'DedeUserID__ckMd5']) {
+        final v = _fullCookies![k];
+        if (v != null) savedLogin[k] = v;
+      }
+    }
     try {
       final spi = await dio.get('https://api.bilibili.com/x/frontend/finger/spi');
       final data = (spi.data as Map<String, dynamic>)['data'] as Map<String, dynamic>;
@@ -97,12 +108,19 @@ class VideoRepository {
           'https://api.bilibili.com/bapis/bilibili.api.ticket.v1.Ticket/GenWebTicket',
           queryParameters: {'key_id': 'ec02', 'hexsign': hexSign, 'context[ts]': '$ts', 'csrf': ''},
         );
-        final t = ((tick.data as Map<String, dynamic>)['data'] as Map<String, dynamic>?)?['ticket'] as String?;
-        if (t != null && t.isNotEmpty) cookies['bili_ticket'] = t;
+        final td = (tick.data as Map<String, dynamic>)['data'] as Map<String, dynamic>?;
+        final t = td?['ticket'] as String?;
+        if (t != null && t.isNotEmpty) {
+          cookies['bili_ticket'] = t;
+          final created = (td?['created_at'] as int?) ?? ts;
+          final ttl = (td?['ttl'] as int?) ?? 1800;
+          _biliTicketExpires = created + ttl;
+        }
       } catch (e) {
         // ignore: avoid_print
         print('[kzv] bili_ticket failed: $e');
       }
+      cookies.addAll(savedLogin);
       _fullCookies = cookies;
       _buvidReady = true;
       // ignore: avoid_print
@@ -141,13 +159,16 @@ class VideoRepository {
     if (!parsed.containsKey('SESSDATA') || parsed['SESSDATA']!.isEmpty) {
       return false;
     }
+    final before = Map<String, String>.from(_fullCookies ?? {});
     final merged = Map<String, String>.from(_fullCookies ?? {});
     merged.addAll(parsed);
     _fullCookies = merged;
     final ok = await _validateLogin();
     if (ok) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('login_cookie', cookieHeader);
+      const storage = FlutterSecureStorage();
+      await storage.write(key: 'login_cookie', value: cookieHeader);
+    } else {
+      _fullCookies = before;
     }
     return ok;
   }
@@ -181,16 +202,16 @@ class VideoRepository {
   }
 
   Future<void> restoreLogin() async {
-    final prefs = await SharedPreferences.getInstance();
-    final saved = prefs.getString('login_cookie');
+    const storage = FlutterSecureStorage();
+    final saved = await storage.read(key: 'login_cookie');
     if (saved != null && saved.isNotEmpty) {
       await loginWithCookie(saved);
     }
   }
 
   Future<void> logout() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('login_cookie');
+    const storage = FlutterSecureStorage();
+    await storage.delete(key: 'login_cookie');
     _loggedIn = false;
     _loginName = '';
     if (_fullCookies != null) {

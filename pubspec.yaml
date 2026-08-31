@@ -33,6 +33,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   dio: ^5.7.0
   crypto: ^3.0.6
+  flutter_secure_storage: ^9.2.2
   shared_preferences: ^2.3.2
   video_player: ^2.9.2
   cached_network_image: ^3.3.1
@@ -50,6 +51,9 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+
+dependency_overrides:
+  wakelock_plus: 1.2.8
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

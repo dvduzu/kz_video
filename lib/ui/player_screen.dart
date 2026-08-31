@@ -269,13 +269,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 ),
               ),
             ),
-          AnimatedOpacity(
-            opacity: showControls ? 1 : 0,
-            duration: const Duration(milliseconds: 200),
-            child: Center(
-              child: IconButton(
-                icon: Icon(playing ? Icons.pause : Icons.play_arrow, size: 64, color: Colors.white70),
-                onPressed: () { playing ? player.pause() : player.play(); },
+          IgnorePointer(
+            ignoring: !showControls,
+            child: AnimatedOpacity(
+              opacity: showControls ? 1 : 0,
+              duration: const Duration(milliseconds: 200),
+              child: Center(
+                child: IconButton(
+                  icon: Icon(playing ? Icons.pause : Icons.play_arrow, size: 64, color: Colors.white70),
+                  onPressed: () { playing ? player.pause() : player.play(); },
+                ),
               ),
             ),
           ),
@@ -309,10 +312,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 ),
               ),
             ),
-          AnimatedOpacity(
-            opacity: showControls ? 1 : 0,
-            duration: const Duration(milliseconds: 200),
-            child: Column(children: [
+          IgnorePointer(
+            ignoring: !showControls,
+            child: AnimatedOpacity(
+              opacity: showControls ? 1 : 0,
+              duration: const Duration(milliseconds: 200),
+              child: Column(children: [
               SafeArea(
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
@@ -411,7 +416,8 @@ IconButton(
                 ),
               ),
             ]),
-          ),
+              ),
+            ),
         ]),
       ),
     );
