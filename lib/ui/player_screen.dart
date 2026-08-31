@@ -25,8 +25,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   double speed = 1.0;
   int? currentQn;
   bool ready = false;
+  bool longPressAccel = false;
   bool watchLaterEnabled = true;
   bool subscribed = false;
+  bool watchLaterAdded = false;
   static const qnLabels = {80: '高清(1080p)', 64: '标清(720p)', 32: '流畅(480p)'};
 
   @override
@@ -40,6 +42,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (widget.video.mid > 0) {
       VideoRepository.instance().isSubscribed(widget.video.mid).then((v) { if (mounted) setState(() => subscribed = v); });
     }
+    VideoRepository.instance().getWatchLater().then((list) {
+      if (mounted) setState(() => watchLaterAdded = list.any((v) => v.bvid == widget.video.bvid));
+    });
     _load();
   }
 
@@ -47,7 +52,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
     player.stream.playing.listen((_) { if (mounted) setState(() {}); });
     player.stream.position.listen((_) { if (mounted) setState(() {}); });
     player.stream.duration.listen((_) { if (mounted) setState(() {}); });
-    player.stream.error.listen((e) { if (mounted && e != null) setState(() => error = e.toString()); });
+    player.stream.error.listen((e) { _onPlaybackError(e); });
+  }
+
+  int _retryCount = 0;
+  Future<void> _onPlaybackError(Object? e) async {
+    if (!mounted || e == null) return;
+    if (_retryCount >= 2) {
+      setState(() => error = '播放中断：$e');
+      return;
+    }
+    _retryCount++;
+    // 视频轨中断/格式错误：尝试降一个清晰度重载
+    final q = (currentQn ?? 80) == 80 ? 64 : 32;
+    // ignore: avoid_print
+    print('[kzv] playback error, retry qn=$q: $e');
+    await _load(qn: q);
   }
 
   Future<void> _load({int? qn}) async {
@@ -73,6 +93,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
       await player.play();
       if (mounted) setState(() { ready = true; currentQn = qn; });
+      _retryCount = 0;
       VideoRepository.instance().addHistory(widget.video);
       _startHideTimer();
     } catch (e) {
@@ -97,6 +118,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
         : [DeviceOrientation.portraitUp]);
   }
 
+  String? _toastMsg;
+  Timer? _toastTimer;
+  void _toast(String msg, {int ms = 1500}) {
+    if (!mounted) return;
+    _toastTimer?.cancel();
+    setState(() => _toastMsg = msg);
+    _toastTimer = Timer(Duration(milliseconds: ms), () {
+      if (mounted) setState(() => _toastMsg = null);
+    });
+  }
+
   String _format(Duration d) {
     final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
     final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
@@ -110,6 +142,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       VideoRepository.instance().saveProgress(widget.video.bvid, player.state.position.inMilliseconds, player.state.duration.inMilliseconds);
     }
     hideTimer?.cancel();
+    _toastTimer?.cancel();
     player.dispose();
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     super.dispose();
@@ -130,10 +163,61 @@ class _PlayerScreenState extends State<PlayerScreen> {
       backgroundColor: Colors.black,
       body: GestureDetector(
         onTap: _toggleControls,
+        onDoubleTap: () { playing ? player.pause() : player.play(); },
+        onLongPressStart: (_) {
+          player.setRate(2.0);
+          setState(() { longPressAccel = true; showControls = false; });
+        },
+        onLongPressEnd: (_) {
+          player.setRate(speed);
+          setState(() => longPressAccel = false);
+        },
+        onLongPressCancel: () {
+          player.setRate(speed);
+          if (mounted) setState(() => longPressAccel = false);
+        },
         child: Stack(children: [
           Center(child: Video(controller: controller, controls: NoVideoControls)),
-          if (!playing)
-            Center(child: IconButton(icon: const Icon(Icons.play_arrow, size: 64, color: Colors.white70), onPressed: () { player.play(); })),
+          AnimatedOpacity(
+            opacity: showControls ? 1 : 0,
+            duration: const Duration(milliseconds: 200),
+            child: Center(
+              child: IconButton(
+                icon: Icon(playing ? Icons.pause : Icons.play_arrow, size: 64, color: Colors.white70),
+                onPressed: () { playing ? player.pause() : player.play(); },
+              ),
+            ),
+          ),
+          if (longPressAccel)
+            IgnorePointer(
+              child: SafeArea(
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(16)),
+                      child: const Text('2x 加速中', style: TextStyle(color: Colors.white, fontSize: 14)),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          if (_toastMsg != null)
+            SafeArea(
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 48),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(color: const Color(0xE6212121), borderRadius: BorderRadius.circular(20)),
+                    child: Text(_toastMsg!, style: const TextStyle(color: Colors.white, fontSize: 13)),
+                  ),
+                ),
+              ),
+            ),
           AnimatedOpacity(
             opacity: showControls ? 1 : 0,
             duration: const Duration(milliseconds: 200),
@@ -180,15 +264,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     ),
                     if (watchLaterEnabled)
 IconButton(
-                      tooltip: '稍后再看',
-                      icon: const Icon(Icons.bookmark_add_outlined, color: Colors.white),
+                      tooltip: watchLaterAdded ? '取消稍后再看' : '稍后再看',
+                      icon: Icon(watchLaterAdded ? Icons.bookmark : Icons.bookmark_add_outlined, color: watchLaterAdded ? Theme.of(context).colorScheme.primary : Colors.white),
                       onPressed: () async {
-                        await VideoRepository.instance().addWatchLater(widget.video);
-                        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                          content: const Text('已加入稍后再看'),
-                          duration: const Duration(milliseconds: 1500),
-                          action: SnackBarAction(label: '关闭', onPressed: () {}),
-                        ));
+                        if (watchLaterAdded) {
+                          await VideoRepository.instance().removeWatchLater(widget.video.bvid);
+                          if (mounted) {
+                            setState(() => watchLaterAdded = false);
+                            _toast('已取消稍后再看');
+                          }
+                        } else {
+                          await VideoRepository.instance().addWatchLater(widget.video);
+                          if (mounted) {
+                            setState(() => watchLaterAdded = true);
+                            _toast('已加入稍后再看');
+                          }
+                        }
                       },
                     ),
                     if (widget.video.mid > 0)
@@ -200,11 +291,7 @@ IconButton(
                             await VideoRepository.instance().removeSubscription(widget.video.mid);
                             if (mounted) {
                               setState(() => subscribed = false);
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                content: const Text('已取消关注'),
-                                duration: const Duration(milliseconds: 1500),
-                                action: SnackBarAction(label: '关闭', onPressed: () {}),
-                              ));
+                              _toast('已取消关注');
                             }
                             return;
                           }
@@ -212,17 +299,9 @@ IconButton(
                           if (mounted) {
                             if (ok) {
                               setState(() => subscribed = true);
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                content: Text('已关注 ${widget.video.owner}'),
-                                duration: const Duration(milliseconds: 1500),
-                                action: SnackBarAction(label: '关闭', onPressed: () {}),
-                              ));
+                              _toast('已关注 ${widget.video.owner}');
                             } else {
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                content: const Text('订阅已满 50 人，请到设置→订阅管理移除一个'),
-                                duration: const Duration(milliseconds: 2000),
-                                action: SnackBarAction(label: '关闭', onPressed: () {}),
-                              ));
+                              _toast('订阅已满 50 人，请到设置→订阅管理移除一个', ms: 2000);
                             }
                           }
                         },

@@ -23,6 +23,17 @@ class MyApp extends StatefulWidget {
   State<MyApp> createState() => _MyAppState();
 }
 
+SnackBarThemeData _snackBarTheme(Brightness brightness) {
+  final cs = ColorScheme.fromSeed(seedColor: Colors.deepPurple, brightness: brightness);
+  return SnackBarThemeData(
+    behavior: SnackBarBehavior.floating,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+    backgroundColor: cs.inverseSurface,
+    contentTextStyle: TextStyle(color: cs.onInverseSurface),
+    actionTextColor: cs.onInverseSurface,
+  );
+}
+
 class _MyAppState extends State<MyApp> {
   ThemeMode mode = ThemeMode.system;
   void toggle() {
@@ -35,8 +46,8 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'KzVideo',
-      theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple), useMaterial3: true),
-      darkTheme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple, brightness: Brightness.dark), useMaterial3: true),
+      theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple), useMaterial3: true, snackBarTheme: _snackBarTheme(Brightness.light)),
+      darkTheme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple, brightness: Brightness.dark), useMaterial3: true, snackBarTheme: _snackBarTheme(Brightness.dark)),
       themeMode: mode,
       home: App(mode: mode, onToggleTheme: toggle),
     );

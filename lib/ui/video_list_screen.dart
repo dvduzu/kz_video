@@ -231,28 +231,47 @@ class _VideoListScreenState extends State<VideoListScreen> {
 
   Future<void> _showSubscriptions() async {
     final subs = await VideoRepository.instance().getSubscriptions();
+    final manualOn = await (await SharedPreferences.getInstance()).getBool('setting_manual_mid') ?? false;
     if (!mounted) return;
-    showModalBottomSheet(context: context, showDragHandle: true, builder: (ctx) => SizedBox(
-      height: MediaQuery.of(ctx).size.height * 0.6,
-      child: Column(children: [
-        ListTile(leading: const Icon(Icons.person_add_alt), title: Text('订阅管理 (${subs.length}/50)', style: Theme.of(ctx).textTheme.titleMedium)),
-        if (subs.isEmpty) const Expanded(child: Center(child: Text('暂无订阅，播放页可关注 UP 主'))),
-        Expanded(child: ListView.builder(
-          itemCount: subs.length,
-          itemBuilder: (_, i) {
-            final s = subs[i];
-            return ListTile(
-              title: Text(s.name.isEmpty ? 'UP ${s.mid}' : s.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-              subtitle: Text('mid: ${s.mid}'),
-              trailing: IconButton(icon: const Icon(Icons.delete_outline), onPressed: () async {
-                await VideoRepository.instance().removeSubscription(s.mid);
-                if (ctx.mounted) Navigator.pop(ctx);
-                _showSubscriptions();
-              }),
-            );
-          },
-        )),
-      ]),
+    final manualCtl = TextEditingController();
+    showModalBottomSheet(context: context, showDragHandle: true, isScrollControlled: true, builder: (ctx) => Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+      child: SizedBox(
+        height: MediaQuery.of(ctx).size.height * 0.6,
+        child: Column(children: [
+          ListTile(leading: const Icon(Icons.person_add_alt), title: Text('订阅管理 (${subs.length}/50)', style: Theme.of(ctx).textTheme.titleMedium)),
+          if (manualOn)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(children: [
+                Expanded(child: TextField(
+                  controller: manualCtl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(hintText: '输入 UP 主 mid (数字ID)', isDense: true),
+                  onSubmitted: (_) => _manualAddSub(ctx, manualCtl),
+                )),
+                const SizedBox(width: 8),
+                FilledButton(onPressed: () => _manualAddSub(ctx, manualCtl), child: const Text('添加')),
+              ]),
+            ),
+          if (subs.isEmpty) const Expanded(child: Center(child: Text('暂无订阅，播放页可关注 UP 主'))),
+          Expanded(child: ListView.builder(
+            itemCount: subs.length,
+            itemBuilder: (_, i) {
+              final s = subs[i];
+              return ListTile(
+                title: Text(s.name.isEmpty ? 'UP ${s.mid}' : s.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                subtitle: Text('mid: ${s.mid}'),
+                trailing: IconButton(icon: const Icon(Icons.delete_outline), onPressed: () async {
+                  await VideoRepository.instance().removeSubscription(s.mid);
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  _showSubscriptions();
+                }),
+              );
+            },
+          )),
+        ]),
+      ),
     ));
   }
 
@@ -302,7 +321,6 @@ class _VideoListScreenState extends State<VideoListScreen> {
         var selManual = manualAdd;
         var selMode = sourceMode;
         var selShowMode = showModeSel;
-        final manualCtl = TextEditingController();
         const durs = {600: '10 分钟', 1200: '20 分钟', 1800: '30 分钟'};
         const rids = {'': '全部', 'tech': '科技', 'edu': '知识', 'life': '生活', 'game': '游戏', 'ent': '娱乐'};
         return StatefulBuilder(builder: (ctx, setModalState) => SingleChildScrollView(
@@ -361,24 +379,10 @@ class _VideoListScreenState extends State<VideoListScreen> {
               children: [
                 SwitchListTile(
                   title: const Text('手动添加 UP'),
-                  subtitle: const Text('按 mid 手动关注'),
+                  subtitle: const Text('在订阅管理中按 mid 手动关注'),
                   value: selManual,
                   onChanged: (v) => setModalState(() => selManual = v),
                 ),
-                if (selManual)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                    child: Row(children: [
-                      Expanded(child: TextField(
-                        controller: manualCtl,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(hintText: '输入 UP 主 mid (数字ID)', isDense: true),
-                        onSubmitted: (_) => _manualAddSub(ctx, manualCtl),
-                      )),
-                      const SizedBox(width: 8),
-                      FilledButton(onPressed: () => _manualAddSub(ctx, manualCtl), child: const Text('添加')),
-                    ]),
-                  ),
                 const Divider(height: 4),
                 SwitchListTile(
                   title: const Text('数据源模式切换'),
