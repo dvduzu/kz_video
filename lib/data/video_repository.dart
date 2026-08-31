@@ -339,7 +339,8 @@ class VideoRepository {
       subVideos.addAll(await getUpVideos(sub.mid));
     }
     bool isSubVid(String bvid) => subVideos.any((v) => v.bvid == bvid);
-    final mode = prefs.getString('setting_source_mode') ?? 'mixed';
+    final modeEnabled = prefs.getBool('setting_source_mode_enabled') ?? false;
+    final mode = modeEnabled ? (prefs.getString('setting_source_mode') ?? 'mixed') : 'mixed';
     final popularFiltered = popular.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid) && !isSubVid(v.bvid)).toList()
       ..sort((a, b) => b.pubdate.compareTo(a.pubdate));
     final pool = popularFiltered;

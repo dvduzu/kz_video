@@ -9,7 +9,8 @@ class VideoListScreen extends StatefulWidget {
   final void Function(VideoInfo) onPlay;
   final ThemeMode mode;
   final VoidCallback onToggleTheme;
-  const VideoListScreen({super.key, required this.onPlay, required this.mode, required this.onToggleTheme});
+  final VoidCallback onOpenThemeSettings;
+  const VideoListScreen({super.key, required this.onPlay, required this.mode, required this.onToggleTheme, required this.onOpenThemeSettings});
 
   @override
   State<VideoListScreen> createState() => _VideoListScreenState();
@@ -91,7 +92,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
                 IconButton(
                   icon: Icon(Theme.of(context).brightness == Brightness.dark ? Icons.light_mode : Icons.dark_mode),
                   tooltip: '切换主题',
-                  onPressed: widget.onToggleTheme,
+                  onPressed: widget.onOpenThemeSettings,
                 ),
               ],
       ),
@@ -306,7 +307,20 @@ class _VideoListScreenState extends State<VideoListScreen> {
                     title: Text(u.uname, maxLines: 1, overflow: TextOverflow.ellipsis),
                     subtitle: Text('粉丝 ${u.fans} · ${u.sign}', maxLines: 1, overflow: TextOverflow.ellipsis),
                     trailing: isFollowed
-                        ? Icon(Icons.check_circle, color: Theme.of(ctx).colorScheme.primary)
+                        ? IconButton(
+                            icon: Icon(Icons.check_circle, color: Theme.of(ctx).colorScheme.primary),
+                            tooltip: '取消关注',
+                            onPressed: () async {
+                              await VideoRepository.instance().removeSubscription(u.mid);
+                              setSheet(() => followed.removeWhere((f) => f.mid == u.mid));
+                              ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+                                content: Text('已取消关注 ${u.uname}'),
+                                duration: const Duration(milliseconds: 1500),
+                                behavior: SnackBarBehavior.floating,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                              ));
+                            },
+                          )
                         : IconButton(icon: const Icon(Icons.add), tooltip: '关注', onPressed: () async {
                             final ok = await VideoRepository.instance().addSubscription(u.mid, u.uname, face: u.face);
                             if (ctx.mounted) {
@@ -480,18 +494,16 @@ class _VideoListScreenState extends State<VideoListScreen> {
     final rid = prefs.getString('setting_rid') ?? '';
     final history = prefs.getBool('setting_history') ?? true;
     final watchLater = prefs.getBool('setting_watch_later') ?? true;
-    final manualAdd = prefs.getBool('setting_manual_mid') ?? false;
     final sourceMode = prefs.getString('setting_source_mode') ?? 'mixed';
     final showModeSel = prefs.getBool('setting_source_mode_enabled') ?? false;
     if (!mounted) return;
-    final result = await showModalBottomSheet<({int minDuration, String rid, bool history, bool watchLater, bool manualAdd, String sourceMode, bool showModeSel})>(
+    final result = await showModalBottomSheet<({int minDuration, String rid, bool history, bool watchLater, String sourceMode, bool showModeSel})>(
       context: context, showDragHandle: true, isScrollControlled: true,
       builder: (ctx) {
         var selDur = minDuration;
         var selRid = rid;
         var selHistory = history;
         var selWatchLater = watchLater;
-        var selManual = manualAdd;
         var selMode = sourceMode;
         var selShowMode = showModeSel;
         const durs = {600: '10 分钟', 1200: '20 分钟', 1800: '30 分钟'};
@@ -517,6 +529,12 @@ class _VideoListScreenState extends State<VideoListScreen> {
               onSelected: (_) => setModalState(() => selDur = e.key),
             )).toList()),
             const Divider(height: 24),
+            ListTile(
+              leading: const Icon(Icons.palette_outlined),
+              title: const Text('颜色设置'),
+              subtitle: const Text('深浅模式 / 色调'),
+              onTap: () { Navigator.pop(ctx); widget.onOpenThemeSettings(); },
+            ),
             ListTile(
               leading: Icon(VideoRepository.instance().isLoggedIn ? Icons.account_circle : Icons.login),
               title: Text(VideoRepository.instance().isLoggedIn ? '登录状态：${VideoRepository.instance().loginName}' : '登录'),
@@ -554,15 +572,8 @@ class _VideoListScreenState extends State<VideoListScreen> {
             ExpansionTile(
               leading: const Icon(Icons.settings_suggest),
               title: const Text('其他功能'),
-              subtitle: const Text('手动添加 UP 等'),
+              subtitle: const Text('数据源模式切换等'),
               children: [
-                SwitchListTile(
-                  title: const Text('手动添加 UP'),
-                  subtitle: const Text('在订阅管理中按 mid 手动关注'),
-                  value: selManual,
-                  onChanged: (v) => setModalState(() => selManual = v),
-                ),
-                const Divider(height: 4),
                 SwitchListTile(
                   title: const Text('数据源模式切换'),
                   subtitle: const Text('默认混合（订阅+热门），开启后可选'),
@@ -586,7 +597,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
             ),
             const SizedBox(height: 8),
             SizedBox(width: double.infinity, child: FilledButton(
-              onPressed: () => Navigator.pop(ctx, (minDuration: selDur, rid: selRid, history: selHistory, watchLater: selWatchLater, manualAdd: selManual, sourceMode: selMode, showModeSel: selShowMode)),
+              onPressed: () => Navigator.pop(ctx, (minDuration: selDur, rid: selRid, history: selHistory, watchLater: selWatchLater, sourceMode: selMode, showModeSel: selShowMode)),
               child: const Text('应用'),
             )),
             const SizedBox(height: 8),
@@ -599,23 +610,10 @@ class _VideoListScreenState extends State<VideoListScreen> {
       await prefs.setString('setting_rid', result.rid);
       await prefs.setBool('setting_history', result.history);
       await prefs.setBool('setting_watch_later', result.watchLater);
-      await prefs.setBool('setting_manual_mid', result.manualAdd);
+      await prefs.setBool('setting_watch_later', result.watchLater);
       await prefs.setString('setting_source_mode', result.sourceMode);
       await prefs.setBool('setting_source_mode_enabled', result.showModeSel);
       await _load(force: true);
     }
-  }
-
-  Future<void> _manualAddSub(BuildContext ctx, TextEditingController ctl) async {
-    final mid = int.tryParse(ctl.text.trim());
-    if (mid == null || mid <= 0) {
-      if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('请输入有效的 mid')));
-      return;
-    }
-    final ok = await VideoRepository.instance().addSubscription(mid, '');
-    if (ctx.mounted) {
-      ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(ok ? '已添加 mid $mid' : '订阅已满 50 人')));
-    }
-    ctl.clear();
   }
 }
