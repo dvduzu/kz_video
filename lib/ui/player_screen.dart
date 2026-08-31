@@ -31,6 +31,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool watchLaterAdded = false;
   bool subtitleOn = false;
   String? _subtitleVtt;
+  double subtitleFontSize = 32;
+  double subtitlePos = 24;
+  bool subtitleBg = true;
   static const qnLabels = {80: '高清(1080p)', 64: '标清(720p)', 32: '流畅(480p)'};
 
   @override
@@ -107,6 +110,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _loadSubtitle() async {
     final sub = await VideoRepository.instance().getSubtitles(widget.video.bvid);
     if (!mounted || sub == null) return;
+    // ignore: avoid_print
+    print('[kzv] subtitle loaded len=${sub.vtt.length} lan=${sub.lanDoc}');
     setState(() { _subtitleVtt = sub.vtt; });
   }
 
@@ -114,11 +119,45 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (_subtitleVtt == null) return;
     subtitleOn = !subtitleOn;
     if (subtitleOn) {
+      // ignore: avoid_print
+      print('[kzv] set subtitle track len=${_subtitleVtt!.length}');
       player.setSubtitleTrack(SubtitleTrack.data(_subtitleVtt!, title: '字幕'));
     } else {
       player.setSubtitleTrack(SubtitleTrack.no());
     }
     setState(() {});
+  }
+
+  void _showSubtitleMenu() {
+    showModalBottomSheet(context: context, showDragHandle: true, builder: (ctx) {
+      return StatefulBuilder(builder: (ctx, setModalState) => SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          SwitchListTile(
+            title: const Text('显示字幕'),
+            value: subtitleOn,
+            onChanged: (v) { subtitleOn = v; setModalState(() {}); setState(() {}); },
+          ),
+          const Text('字号', style: TextStyle(fontWeight: FontWeight.bold)),
+          Slider(
+            value: subtitleFontSize,
+            min: 20, max: 60,
+            onChanged: (v) { subtitleFontSize = v; setModalState(() {}); setState(() {}); },
+          ),
+          const Text('位置（越高越靠上）', style: TextStyle(fontWeight: FontWeight.bold)),
+          Slider(
+            value: subtitlePos,
+            min: 10, max: 200,
+            onChanged: (v) { subtitlePos = v; setModalState(() {}); setState(() {}); },
+          ),
+          SwitchListTile(
+            title: const Text('半透明背景'),
+            value: subtitleBg,
+            onChanged: (v) { subtitleBg = v; setModalState(() {}); setState(() {}); },
+          ),
+        ]),
+      ));
+    });
   }
 
   void _startHideTimer() {
@@ -197,7 +236,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
           if (mounted) setState(() => longPressAccel = false);
         },
         child: Stack(children: [
-          Center(child: Video(controller: controller, controls: NoVideoControls)),
+          Center(child: Video(controller: controller, controls: NoVideoControls, subtitleViewConfiguration: SubtitleViewConfiguration(
+            visible: subtitleOn,
+            style: TextStyle(
+              fontSize: subtitleFontSize,
+              color: Colors.white,
+              height: 1.4,
+              backgroundColor: subtitleBg ? Colors.black54 : Colors.transparent,
+            ),
+            padding: EdgeInsets.fromLTRB(16, 0, 16, subtitlePos),
+          ))),
           AnimatedOpacity(
             opacity: showControls ? 1 : 0,
             duration: const Duration(milliseconds: 200),
@@ -286,7 +334,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       IconButton(
                         tooltip: subtitleOn ? '关闭字幕' : '字幕',
                         icon: Icon(subtitleOn ? Icons.closed_caption : Icons.closed_caption_off, color: subtitleOn ? Theme.of(context).colorScheme.primary : Colors.white),
-                        onPressed: _toggleSubtitle,
+                        onPressed: _showSubtitleMenu,
                       ),
                     if (watchLaterEnabled)
 IconButton(
