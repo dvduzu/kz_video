@@ -184,21 +184,10 @@ class VideoRepository {
           return all;
         }
         final items = (body['data']?['item'] as List?) ?? [];
-        for (final e in items.whereType<Map<String, dynamic>>()) {
-          if (e['goto'] != 'av' || e['owner'] == null) continue;
-          final bvid = (e['bvid'] as String?) ?? '';
-          if (bvid.isEmpty || all.any((v) => v.bvid == bvid)) continue;
-          all.add(VideoInfo(
-            bvid: bvid,
-            title: (e['title'] as String?) ?? '',
-            pic: ((e['pic'] as String?) ?? '').replaceFirst('http://', 'https://'),
-            duration: (e['duration'] as int?) ?? 0,
-            owner: ((e['owner'] as Map<String, dynamic>?)?['name'] as String?) ?? '',
-            view: ((e['stat'] as Map<String, dynamic>?)?['view'] as int?) ?? 0,
-            pubdate: (e['pubdate'] as int?) ?? 0,
-            mid: ((e['owner'] as Map<String, dynamic>?)?['mid'] as int?) ?? 0,
-            tid: (e['tid'] as int?) ?? 0,
-          ));
+        final avItems = items.where((e) => e is Map<String, dynamic> && e['goto'] == 'av' && e['owner'] != null).toList();
+        for (final v in _parseVideoList(avItems)) {
+          if (all.any((x) => x.bvid == v.bvid)) continue;
+          all.add(v);
         }
         if (items.isEmpty) break;
       }
@@ -210,6 +199,49 @@ class VideoRepository {
       print('[kzv] rcmd failed: $e');
       return [];
     }
+  }
+
+  List<VideoInfo> _parseVideoList(List<dynamic> list) {
+    return list.whereType<Map<String, dynamic>>().map((e) => VideoInfo(
+      bvid: (e['bvid'] as String?) ?? '',
+      title: (e['title'] as String?) ?? '',
+      pic: ((e['pic'] as String?) ?? '').replaceFirst('http://', 'https://'),
+      duration: (e['duration'] as int?) ?? 0,
+      owner: ((e['owner'] as Map<String, dynamic>?)?['name'] as String?) ?? '',
+      view: ((e['stat'] as Map<String, dynamic>?)?['view'] as int?) ?? 0,
+      pubdate: (e['pubdate'] as int?) ?? 0,
+      mid: ((e['owner'] as Map<String, dynamic>?)?['mid'] as int?) ?? 0,
+      tid: (e['tid'] as int?) ?? 0,
+    )).where((v) => v.bvid.isNotEmpty).toList();
+  }
+
+  Future<List<VideoInfo>> _fetchPopular() async {
+    final all = <VideoInfo>[];
+    for (var pn = 1; pn <= 8; pn++) {
+      try {
+        final data = await _wbiGet('/x/web-interface/popular', {'pn': pn, 'ps': 30});
+        all.addAll(_parseVideoList(data['data']?['list'] as List? ?? []));
+      } catch (_) {}
+    }
+    return all;
+  }
+
+  Future<List<VideoInfo>> _fetchRanking(int ridMain) async {
+    try {
+      final data = await _wbiGet('/x/web-interface/ranking/v2', {'rid': ridMain, 'type': 'all'});
+      return _parseVideoList(data['data']?['list'] as List? ?? []);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<List<VideoInfo>> _fetchSubVideos(int ridMain) async {
+    final subs = await getSubscriptions();
+    final all = <VideoInfo>[];
+    for (final sub in subs) {
+      all.addAll(await getUpVideos(sub.mid, tid: ridMain));
+    }
+    return all;
   }
 
   Future<List<VideoInfo>> getDailyVideos({bool force = false}) async {
@@ -254,50 +286,11 @@ class VideoRepository {
       }
     }
     final List<VideoInfo> popular = [];
-    List<Map<String, dynamic>> rawVideos(List<dynamic> list) => list.map((e) => e as Map<String, dynamic>).toList();
     for (var attempt = 0; attempt < 3 && popular.isEmpty; attempt++) {
-      if (ridMain == 0) {
-        for (var pn = 1; pn <= 8; pn++) {
-          try {
-            final data = await _wbiGet('/x/web-interface/popular', {'pn': pn, 'ps': 30});
-            final lst = (data['data']?['list'] as List?) ?? [];
-            popular.addAll(rawVideos(lst).map((e) => VideoInfo(
-              bvid: e['bvid'] as String,
-              title: e['title'] as String? ?? '',
-              pic: (e['pic'] as String? ?? '').replaceFirst('http://', 'https://'),
-              duration: e['duration'] as int? ?? 0,
-              owner: (e['owner']?['name'] as String?) ?? '',
-              view: (e['stat']?['view'] as int?) ?? 0,
-              pubdate: (e['pubdate'] as int?) ?? 0,
-              mid: (e['owner']?['mid'] as int?) ?? 0,
-              tid: (e['tid'] as int?) ?? 0,
-            )));
-          } catch (_) {}
-        }
-      } else {
-        try {
-          final data = await _wbiGet('/x/web-interface/ranking/v2', {'rid': ridMain, 'type': 'all'});
-          final lst = (data['data']?['list'] as List?) ?? [];
-          popular.addAll(rawVideos(lst).map((e) => VideoInfo(
-            bvid: e['bvid'] as String,
-            title: e['title'] as String? ?? '',
-            pic: (e['pic'] as String? ?? '').replaceFirst('http://', 'https://'),
-            duration: e['duration'] as int? ?? 0,
-            owner: (e['owner']?['name'] as String?) ?? '',
-            view: (e['stat']?['view'] as int?) ?? 0,
-            pubdate: (e['pubdate'] as int?) ?? 0,
-            mid: (e['owner']?['mid'] as int?) ?? 0,
-            tid: (e['tid'] as int?) ?? 0,
-          )));
-        } catch (_) {}
-      }
+      popular.addAll(ridMain == 0 ? await _fetchPopular() : await _fetchRanking(ridMain));
       if (popular.isEmpty) await Future<void>.delayed(Duration(milliseconds: 600 * (attempt + 1)));
     }
-    final subs = await getSubscriptions();
-    final List<VideoInfo> subVideos = [];
-    for (final sub in subs) {
-      subVideos.addAll(await getUpVideos(sub.mid, tid: ridMain));
-    }
+    final subVideos = await _fetchSubVideos(ridMain);
     if (ridKey == 'sub') {
       final subFiltered = subVideos.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid)).toList()
         ..sort((a, b) => b.pubdate.compareTo(a.pubdate));
