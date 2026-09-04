@@ -12,7 +12,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-  VideoRepository.init(VideoRepository.create());
+  VideoRepository.init(await VideoRepository.create());
   VideoRepository.instance().restoreLogin();
   runApp(const MyApp());
 }

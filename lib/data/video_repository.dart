@@ -2,10 +2,10 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'app_sign.dart';
 import 'api_exception.dart';
 import 'bilibili_client.dart';
+import 'local_store.dart';
 import 'models.dart';
 import 'wbi_sign.dart';
 
@@ -23,17 +23,19 @@ class VideoRepository {
   int get sessExpires => client.sessExpires;
   Future<void> setGuestMode(bool enabled) async {
     await client.setGuestMode(enabled);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('guest_mode', enabled);
+    await store.setGuestMode(enabled);
   }
 
   final BilibiliClient client;
+  final LocalStore store;
   final Dio dio;
 
-  VideoRepository._(this.client) : dio = client.dio;
+  VideoRepository._(this.client, this.store) : dio = client.dio;
 
-  factory VideoRepository.create() {
-    return VideoRepository._(BilibiliClient(BilibiliClient.createDio()));
+  static Future<VideoRepository> create() async {
+    final client = BilibiliClient(BilibiliClient.createDio());
+    final store = await LocalStore.create();
+    return VideoRepository._(client, store);
   }
 
   int _parseSessExpires(String sessdata) {
@@ -153,8 +155,7 @@ class VideoRepository {
     if (saved != null && saved.isNotEmpty) {
       await loginWithCookie(saved);
     }
-    final prefs = await SharedPreferences.getInstance();
-    await client.setGuestMode(prefs.getBool('guest_mode') ?? false);
+    await client.setGuestMode(store.guestMode);
   }
 
   Future<void> logout() async {
@@ -212,17 +213,16 @@ class VideoRepository {
   }
 
   Future<List<VideoInfo>> getDailyVideos({bool force = false}) async {
-    final prefs = await SharedPreferences.getInstance();
-    final minDuration = prefs.getInt('setting_min_duration') ?? 600;
-    final ridKey = prefs.getString('setting_rid') ?? '';
+    final minDuration = store.minDuration;
+    final ridKey = store.rid;
     final ridMain = _ridMain(ridKey);
     final today = _today();
     final key = 'daily_${ridKey}_$today';
     final tsKey = 'daily_ts_${ridKey}_$today';
     final now = DateTime.now().millisecondsSinceEpoch;
     if (!force) {
-      final cachedTs = prefs.getInt(tsKey);
-      final cached = prefs.getString(key);
+      final cachedTs = store.getDailyTs(tsKey);
+      final cached = store.getDailyCache(key);
       if (cached != null && cachedTs != null && (now - cachedTs) < _cacheValidMs) {
         try {
           final list = (jsonDecode(cached) as List).map((e) => VideoInfo.fromJson(e as Map<String, dynamic>)).toList();
@@ -232,10 +232,10 @@ class VideoRepository {
     }
     final blacklist = await _getBlacklistSet();
     if (ridKey != 'sub') {
-      final rcmdOn = prefs.getBool('setting_rcmd_enabled') ?? false;
-      final rcmdRids = (prefs.getStringList('setting_rcmd_rids') ?? const ['', 'tech', 'edu', 'life', 'game', 'ent', 'music']).toSet();
+      final rcmdOn = store.rcmdEnabled;
+      final rcmdRids = store.rcmdRids.toSet();
       if (rcmdOn && rcmdRids.contains(ridKey)) {
-        final batch = prefs.getInt('setting_rcmd_batch') ?? 3;
+        final batch = store.rcmdBatch;
         final rcmdVideos = await _getRcmdVideos(batch: batch);
         final rcmdFiltered = rcmdVideos.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid)).toList();
         // ignore: avoid_print
@@ -246,8 +246,8 @@ class VideoRepository {
           // ignore: avoid_print
           print('[kzv] daily(rcmd) min=$minDuration items=${rcmdFiltered.length} chosen=${chosen.length}');
           if (chosen.isNotEmpty) {
-            await prefs.setString(key, jsonEncode(chosen.map((e) => e.toJson()).toList()));
-            await prefs.setInt(tsKey, now);
+            await store.setDailyCache(key, jsonEncode(chosen.map((e) => e.toJson()).toList()));
+            await store.setDailyTs(tsKey, now);
           }
           return chosen;
         }
@@ -306,8 +306,8 @@ class VideoRepository {
       // ignore: avoid_print
       print('[kzv] daily(sub) min=$minDuration sub=${subFiltered.length} chosen=${chosen.length}');
       if (chosen.isNotEmpty) {
-        await prefs.setString(key, jsonEncode(chosen.map((e) => e.toJson()).toList()));
-        await prefs.setInt(tsKey, now);
+        await store.setDailyCache(key, jsonEncode(chosen.map((e) => e.toJson()).toList()));
+        await store.setDailyTs(tsKey, now);
       }
       return chosen;
     }
@@ -318,8 +318,8 @@ class VideoRepository {
     // ignore: avoid_print
     print('[kzv] daily min=$minDuration popular=${popularFiltered.length} chosen=${chosen.length}');
     if (chosen.isNotEmpty) {
-      await prefs.setString(key, jsonEncode(chosen.map((e) => e.toJson()).toList()));
-      await prefs.setInt(tsKey, now);
+      await store.setDailyCache(key, jsonEncode(chosen.map((e) => e.toJson()).toList()));
+      await store.setDailyTs(tsKey, now);
     }
     return chosen;
   }
@@ -382,36 +382,30 @@ class VideoRepository {
   String? get buvid3 => client.buvid3;
 
   Future<void> addBlacklist(VideoInfo v) async {
-    final prefs = await SharedPreferences.getInstance();
-    final list = prefs.getStringList('blacklist') ?? [];
-    list.removeWhere((e) => _bvidOfJson(e) == v.bvid);
-    list.add(jsonEncode(v.toJson()));
-    await prefs.setStringList('blacklist', list);
+    final list = store.blacklist;
+    list.removeWhere((e) => e['bvid'] == v.bvid);
+    list.add(v.toJson());
+    await store.setBlacklist(list);
   }
 
   Future<List<VideoInfo>> getBlacklistItems() async {
-    final prefs = await SharedPreferences.getInstance();
-    final list = prefs.getStringList('blacklist') ?? [];
-    return list.map((e) {
-      try { return VideoInfo.fromJson(jsonDecode(e) as Map<String, dynamic>); } catch (_) { return null; }
+    return store.blacklist.map((e) {
+      try { return VideoInfo.fromJson(e); } catch (_) { return null; }
     }).whereType<VideoInfo>().toList();
   }
 
   Future<void> removeBlacklist(String bvid) async {
-    final prefs = await SharedPreferences.getInstance();
-    final list = prefs.getStringList('blacklist') ?? [];
-    list.removeWhere((e) => _bvidOfJson(e) == bvid);
-    await prefs.setStringList('blacklist', list);
+    final list = store.blacklist;
+    list.removeWhere((e) => e['bvid'] == bvid);
+    await store.setBlacklist(list);
   }
 
   Future<void> saveProgress(String bvid, int positionMs, int durationMs) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('progress_$bvid', '$positionMs|$durationMs');
+    await store.setProgress(bvid, '$positionMs|$durationMs');
   }
 
   Future<({int positionMs, int durationMs})?> getProgress(String bvid) async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString('progress_$bvid');
+    final raw = store.getProgress(bvid);
     if (raw == null) return null;
     final parts = raw.split('|');
     if (parts.length != 2) return null;
@@ -421,100 +415,70 @@ class VideoRepository {
     return (positionMs: pos, durationMs: dur);
   }
 
-  Future<bool> isHistoryEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('setting_history') ?? true;
-  }
+  Future<bool> isHistoryEnabled() async => store.isHistoryEnabled;
 
-  Future<bool> isWatchLaterEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('setting_watch_later') ?? true;
-  }
+  Future<bool> isWatchLaterEnabled() async => store.isWatchLaterEnabled;
 
   Future<void> addHistory(VideoInfo v) async {
     if (!await isHistoryEnabled()) return;
-    final prefs = await SharedPreferences.getInstance();
-    final list = prefs.getStringList('history') ?? [];
-    list.removeWhere((e) => _bvidOfJson(e) == v.bvid);
-    list.insert(0, jsonEncode(v.toJson()));
+    final list = store.history;
+    list.removeWhere((e) => e['bvid'] == v.bvid);
+    list.insert(0, v.toJson());
     if (list.length > 50) list.removeRange(50, list.length);
-    await prefs.setStringList('history', list);
+    await store.setHistory(list);
   }
 
   Future<List<VideoInfo>> getHistory() async {
-    final prefs = await SharedPreferences.getInstance();
-    final list = prefs.getStringList('history') ?? [];
-    return list.map((e) {
-      try { return VideoInfo.fromJson(jsonDecode(e) as Map<String, dynamic>); } catch (_) { return null; }
+    return store.history.map((e) {
+      try { return VideoInfo.fromJson(e); } catch (_) { return null; }
     }).whereType<VideoInfo>().toList();
   }
 
   Future<void> addWatchLater(VideoInfo v) async {
     if (!await isWatchLaterEnabled()) return;
-    final prefs = await SharedPreferences.getInstance();
-    final list = prefs.getStringList('watch_later') ?? [];
-    if (!list.any((e) => _bvidOfJson(e) == v.bvid)) {
-      list.add(jsonEncode(v.toJson()));
+    final list = store.watchLater;
+    if (!list.any((e) => e['bvid'] == v.bvid)) {
+      list.add(v.toJson());
       if (list.length > 5) list.removeRange(5, list.length);
-      await prefs.setStringList('watch_later', list);
+      await store.setWatchLater(list);
     }
   }
 
   Future<List<VideoInfo>> getWatchLater() async {
-    final prefs = await SharedPreferences.getInstance();
-    final list = prefs.getStringList('watch_later') ?? [];
-    return list.map((e) {
-      try { return VideoInfo.fromJson(jsonDecode(e) as Map<String, dynamic>); } catch (_) { return null; }
+    return store.watchLater.map((e) {
+      try { return VideoInfo.fromJson(e); } catch (_) { return null; }
     }).whereType<VideoInfo>().toList();
   }
 
   Future<void> removeWatchLater(String bvid) async {
-    final prefs = await SharedPreferences.getInstance();
-    final list = prefs.getStringList('watch_later') ?? [];
-    list.removeWhere((e) => _bvidOfJson(e) == bvid);
-    await prefs.setStringList('watch_later', list);
-  }
-
-  String? _bvidOfJson(String s) {
-    try { return (jsonDecode(s) as Map<String, dynamic>)['bvid'] as String?; } catch (_) { return null; }
+    final list = store.watchLater;
+    list.removeWhere((e) => e['bvid'] == bvid);
+    await store.setWatchLater(list);
   }
 
   Future<bool> addSubscription(int mid, String name, {String face = ''}) async {
-    final prefs = await SharedPreferences.getInstance();
-    final list = prefs.getStringList('subscriptions') ?? [];
-    if (list.any((e) => _subMidOfJson(e) == mid)) return true;
+    final list = store.subscriptions;
+    if (list.any((e) => e['mid'] == mid)) return true;
     if (list.length >= 50) return false;
-    list.add(jsonEncode({'mid': mid, 'name': name, 'face': face}));
-    await prefs.setStringList('subscriptions', list);
+    list.add({'mid': mid, 'name': name, 'face': face});
+    await store.setSubscriptions(list);
     return true;
   }
 
-  Future<bool> isSubscribed(int mid) async {
-    final prefs = await SharedPreferences.getInstance();
-    final list = prefs.getStringList('subscriptions') ?? [];
-    return list.any((e) => _subMidOfJson(e) == mid);
-  }
+  Future<bool> isSubscribed(int mid) async => store.subscriptions.any((e) => e['mid'] == mid);
 
   Future<List<({int mid, String name, String face})>> getSubscriptions() async {
-    final prefs = await SharedPreferences.getInstance();
-    final list = prefs.getStringList('subscriptions') ?? [];
-    return list.map((e) {
+    return store.subscriptions.map((m) {
       try {
-        final m = jsonDecode(e) as Map<String, dynamic>;
         return (mid: m['mid'] as int, name: m['name'] as String? ?? '', face: (m['face'] as String?) ?? '');
       } catch (_) { return null; }
     }).whereType<({int mid, String name, String face})>().toList();
   }
 
   Future<void> removeSubscription(int mid) async {
-    final prefs = await SharedPreferences.getInstance();
-    final list = prefs.getStringList('subscriptions') ?? [];
-    list.removeWhere((e) => _subMidOfJson(e) == mid);
-    await prefs.setStringList('subscriptions', list);
-  }
-
-  int? _subMidOfJson(String s) {
-    try { return (jsonDecode(s) as Map<String, dynamic>)['mid'] as int?; } catch (_) { return null; }
+    final list = store.subscriptions;
+    list.removeWhere((e) => e['mid'] == mid);
+    await store.setSubscriptions(list);
   }
 
   Future<List<SearchUser>> searchUsers(String keyword) async {
@@ -641,17 +605,12 @@ class VideoRepository {
   }
 
   Future<bool> canRefreshToday() async {
-    final prefs = await SharedPreferences.getInstance();
-    final today = _today();
-    final count = prefs.getInt('refresh_count_$today') ?? 0;
-    return count < 5;
+    return store.getRefreshCount(_today()) < 5;
   }
 
   Future<void> recordRefresh() async {
-    final prefs = await SharedPreferences.getInstance();
     final today = _today();
-    final count = prefs.getInt('refresh_count_$today') ?? 0;
-    await prefs.setInt('refresh_count_$today', count + 1);
+    await store.setRefreshCount(today, store.getRefreshCount(today) + 1);
   }
 
   Future<List<SubtitleCue>?> getSubtitles(String bvid) async {
@@ -687,9 +646,7 @@ class VideoRepository {
   }
 
   Future<Set<String>> _getBlacklistSet() async {
-    final prefs = await SharedPreferences.getInstance();
-    final list = prefs.getStringList('blacklist') ?? [];
-    return list.map((e) => _bvidOfJson(e)).whereType<String>().toSet();
+    return store.blacklist.map((e) => e['bvid'] as String? ?? '').where((s) => s.isNotEmpty).toSet();
   }
 
   static String _today() {
