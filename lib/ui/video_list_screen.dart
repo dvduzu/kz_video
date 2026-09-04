@@ -31,11 +31,11 @@ class _VideoListScreenState extends State<VideoListScreen> {
   }
 
   Future<void> _onRefresh() async {
-    if (!await VideoRepository.instance().canRefreshToday()) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('今天已结束，明天再来')));
-      return;
-    }
-    await VideoRepository.instance().recordRefresh();
+    // if (!await VideoRepository.instance().canRefreshToday()) {
+    //   if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('今天已结束，明天再来')));
+    //   return;
+    // }
+    // await VideoRepository.instance().recordRefresh();
     await _load(force: true);
   }
 
@@ -48,6 +48,10 @@ class _VideoListScreenState extends State<VideoListScreen> {
       // ignore: avoid_print
       print('[kzv] load error: $e');
       setState(() { error = e.toString(); loading = false; });
+      if (!force) {
+        await Future<void>.delayed(const Duration(seconds: 2));
+        if (mounted) await _load(force: true);
+      }
     }
   }
 
@@ -279,14 +283,22 @@ class _VideoListScreenState extends State<VideoListScreen> {
                   decoration: const InputDecoration(hintText: '搜索站内 UP 主', isDense: true, prefixIcon: Icon(Icons.search, size: 20)),
                   onSubmitted: (_) async {
                     setSheet(() { searching = true; results = []; });
-                    results = await VideoRepository.instance().searchUsers(addCtl.text.trim());
+                    try {
+                      results = await VideoRepository.instance().searchUsers(addCtl.text.trim());
+                    } catch (_) {
+                      if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('搜索失败，请检查网络后重试')));
+                    }
                     if (ctx.mounted) setSheet(() { searching = false; });
                   },
                 )),
                 const SizedBox(width: 8),
                 IconButton(icon: const Icon(Icons.search), onPressed: () async {
                   setSheet(() { searching = true; results = []; });
-                  results = await VideoRepository.instance().searchUsers(addCtl.text.trim());
+                  try {
+                    results = await VideoRepository.instance().searchUsers(addCtl.text.trim());
+                  } catch (_) {
+                    if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('搜索失败，请检查网络后重试')));
+                  }
                   if (ctx.mounted) setSheet(() { searching = false; });
                 }),
               ]),
@@ -524,20 +536,22 @@ class _VideoListScreenState extends State<VideoListScreen> {
     final rid = prefs.getString('setting_rid') ?? '';
     final history = prefs.getBool('setting_history') ?? true;
     final watchLater = prefs.getBool('setting_watch_later') ?? true;
-    final sourceMode = prefs.getString('setting_source_mode') ?? 'mixed';
-    final showModeSel = prefs.getBool('setting_source_mode_enabled') ?? false;
+    final rcmdEnabled = prefs.getBool('setting_rcmd_enabled') ?? false;
+    final rcmdBatch = prefs.getInt('setting_rcmd_batch') ?? 5;
+    final rcmdRids = prefs.getStringList('setting_rcmd_rids') ?? const ['', 'tech', 'edu', 'life', 'game', 'ent', 'music'];
     if (!mounted) return;
-    final result = await showModalBottomSheet<({int minDuration, String rid, bool history, bool watchLater, String sourceMode, bool showModeSel})>(
+    final result = await showModalBottomSheet<({int minDuration, String rid, bool history, bool watchLater, bool rcmdEnabled, int rcmdBatch, List<String> rcmdRids})>(
       context: context, showDragHandle: true, isScrollControlled: true,
       builder: (ctx) {
         var selDur = minDuration;
         var selRid = rid;
         var selHistory = history;
         var selWatchLater = watchLater;
-        var selMode = sourceMode;
-        var selShowMode = showModeSel;
+        var selRcmd = rcmdEnabled;
+        var selBatch = rcmdBatch;
+        var selRids = rcmdRids.toSet();
         const durs = {600: '10 分钟', 1200: '20 分钟', 1800: '30 分钟'};
-        const rids = {'': '全部', 'tech': '科技', 'edu': '知识', 'life': '美食', 'game': '游戏', 'ent': '娱乐', 'music': '音乐'};
+        const rids = {'': '全部', 'tech': '科技', 'edu': '知识', 'life': '美食', 'game': '游戏', 'ent': '娱乐', 'music': '音乐', 'sub': '订阅'};
         return StatefulBuilder(builder: (ctx, setModalState) => SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -558,6 +572,49 @@ class _VideoListScreenState extends State<VideoListScreen> {
               selected: selDur == e.key,
               onSelected: (_) => setModalState(() => selDur = e.key),
             )).toList()),
+            const Divider(height: 24),
+            SwitchListTile(
+              title: const Text('个性化推荐'),
+              subtitle: const Text('全部分区下使用账号个性化推荐（登录后生效）'),
+              value: selRcmd,
+              onChanged: (v) => setModalState(() => selRcmd = v),
+            ),
+            if (selRcmd)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Row(children: [
+                  const Text('推荐拉取批数', style: TextStyle(fontSize: 13)),
+                  const SizedBox(width: 12),
+                  Wrap(spacing: 8, children: [1, 3, 5, 8].map((b) => ChoiceChip(
+                    label: Text('$b'),
+                    selected: selBatch == b,
+                    onSelected: (_) => setModalState(() => selBatch = b),
+                  )).toList()),
+                ]),
+              ),
+            if (selRcmd)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('个性化分区', style: TextStyle(fontSize: 13)),
+                  const SizedBox(height: 6),
+                  Wrap(spacing: 8, children: const {
+                    '': '全部',
+                    'tech': '科技',
+                    'edu': '知识',
+                    'life': '美食',
+                    'game': '游戏',
+                    'ent': '娱乐',
+                    'music': '音乐',
+                  }.entries.map((e) => Builder(builder: (ctx) => FilterChip(
+                    label: Text(e.value),
+                    selected: selRids.contains(e.key),
+                    onSelected: (sel) => setModalState(() {
+                      if (sel) { selRids.add(e.key); } else { selRids.remove(e.key); }
+                    }),
+                  ))).toList()),
+                ]),
+              ),
             const Divider(height: 24),
             ListTile(
               leading: const Icon(Icons.palette_outlined),
@@ -599,35 +656,9 @@ class _VideoListScreenState extends State<VideoListScreen> {
               },
             ),
             const Divider(height: 8),
-            ExpansionTile(
-              leading: const Icon(Icons.settings_suggest),
-              title: const Text('其他功能'),
-              subtitle: const Text('数据源模式切换等'),
-              children: [
-                SwitchListTile(
-                  title: const Text('数据源模式切换'),
-                  subtitle: const Text('默认混合（订阅+热门），开启后可选'),
-                  value: selShowMode,
-                  onChanged: (v) => setModalState(() => selShowMode = v),
-                ),
-                if (selShowMode)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                    child: Wrap(spacing: 8, children: {
-                      'mixed': '混合',
-                      'sub': '纯订阅',
-                      'popular': '纯热门',
-                    }.entries.map((e) => ChoiceChip(
-                      label: Text(e.value),
-                      selected: selMode == e.key,
-                      onSelected: (_) => setModalState(() => selMode = e.key),
-                    )).toList()),
-                  ),
-              ],
-            ),
             const SizedBox(height: 8),
             SizedBox(width: double.infinity, child: FilledButton(
-              onPressed: () => Navigator.pop(ctx, (minDuration: selDur, rid: selRid, history: selHistory, watchLater: selWatchLater, sourceMode: selMode, showModeSel: selShowMode)),
+              onPressed: () => Navigator.pop(ctx, (minDuration: selDur, rid: selRid, history: selHistory, watchLater: selWatchLater, rcmdEnabled: selRcmd, rcmdBatch: selBatch, rcmdRids: selRids.toList())),
               child: const Text('应用'),
             )),
             const SizedBox(height: 8),
@@ -640,8 +671,9 @@ class _VideoListScreenState extends State<VideoListScreen> {
       await prefs.setString('setting_rid', result.rid);
       await prefs.setBool('setting_history', result.history);
       await prefs.setBool('setting_watch_later', result.watchLater);
-      await prefs.setString('setting_source_mode', result.sourceMode);
-      await prefs.setBool('setting_source_mode_enabled', result.showModeSel);
+      await prefs.setBool('setting_rcmd_enabled', result.rcmdEnabled);
+      await prefs.setInt('setting_rcmd_batch', result.rcmdBatch);
+      await prefs.setStringList('setting_rcmd_rids', result.rcmdRids);
       await _load(force: true);
     }
   }
