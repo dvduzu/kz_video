@@ -1,11 +1,11 @@
 import 'dart:convert';
 import 'dart:math';
-import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'app_sign.dart';
 import 'api_exception.dart';
+import 'bilibili_client.dart';
 import 'models.dart';
 import 'wbi_sign.dart';
 
@@ -15,209 +15,25 @@ class VideoRepository {
   static VideoRepository instance() => _instance!;
   static void init(VideoRepository repo) => _instance = repo;
 
-  final Dio dio;
-
-  VideoRepository._(this.dio);
-
-  factory VideoRepository.create(String cookiePath) {
-    final dio = Dio(BaseOptions(
-      baseUrl: 'https://api.bilibili.com',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
-        'Referer': 'https://www.bilibili.com/',
-        'env': 'prod',
-        'app-key': 'android64',
-        'x-bili-aurora-zone': 'sh001',
-      },
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 10),
-    ));
-    dio.interceptors.add(LogInterceptor(requestBody: false, responseBody: false, requestHeader: false));
-    return VideoRepository._(dio);
-  }
-
-  String? _mixinKey;
-  int _mixinFetchedAt = 0;
-
-  Future<String> _getMixinKey() async {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    if (_mixinKey == null || now - _mixinFetchedAt > 12 * 3600 * 1000) {
-      await _ensureBuvid();
-      final resp = await dio.get('/x/web-interface/nav');
-      final wbiImg = resp.data['data']?['wbi_img'];
-      final imgUrl = wbiImg?['img_url'] as String? ?? '';
-      final subUrl = wbiImg?['sub_url'] as String? ?? '';
-      final imgKey = imgUrl.split('/').last.split('.').first;
-      final subKey = subUrl.split('/').last.split('.').first;
-      if (imgKey.isEmpty || subKey.isEmpty) throw Exception('WBI key empty');
-      _mixinKey = WbiSign.getMixinKey(imgKey + subKey);
-      _mixinFetchedAt = now;
-    }
-    return _mixinKey!;
-  }
-
-  bool _buvidReady = false;
-  bool _buvidActivated = false;
-  bool _biliTicketOk = false;
-  int _biliTicketExpires = 0;
-  Map<String, String>? _fullCookies;
-
-  String _hmacSha256(String key, String message) => Hmac(sha256, utf8.encode(key)).convert(utf8.encode(message)).toString();
-
-  String _hex(int len) {
-    final r = Random();
-    final b = List<int>.generate(len, (_) => r.nextInt(256));
-    return b.map((e) => e.toRadixString(16).padLeft(2, '0')).join();
-  }
-
-  String _genUuid() {
-    const map = ['1','2','3','4','5','6','7','8','9','A','B','C','D','E','F','10'];
-    final r = Random();
-    final sb = StringBuffer();
-    final idx = [9,13,17,21];
-    for (var i = 0; i < 32; i++) {
-      if (idx.contains(i)) sb.write('-');
-      sb.write(map[r.nextInt(16)]);
-    }
-    sb.write('${(DateTime.now().millisecondsSinceEpoch % 100000).toString().padLeft(5, '0')}infoc');
-    return sb.toString();
-  }
-
-  Future<void> _ensureBuvid() async {
-    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    if (_buvidReady && _biliTicketOk && now < _biliTicketExpires) return;
-    _buvidReady = false;
-    final savedLogin = <String, String>{};
-    if (_fullCookies != null) {
-      for (final k in ['SESSDATA', 'bili_jct', 'DedeUserID', 'DedeUserID__ckMd5']) {
-        final v = _fullCookies![k];
-        if (v != null) savedLogin[k] = v;
-      }
-    }
-    try {
-      final spi = await dio.get('https://api.bilibili.com/x/frontend/finger/spi');
-      final data = (spi.data as Map<String, dynamic>)['data'] as Map<String, dynamic>;
-      final b3 = data['b_3'] as String? ?? '';
-      final b4 = data['b_4'] as String? ?? '';
-      final ts = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-      final cookies = <String, String>{
-        'buvid3': b3,
-        'buvid4': b4,
-        'b_nut': '$ts',
-        'b_lsid': '${_hex(32).toUpperCase()}_${DateTime.now().millisecondsSinceEpoch.toRadixString(16).toUpperCase()}',
-        '_uuid': _genUuid(),
-        'buvid_fp': _hex(16),
-      };
-      final hexSign = _hmacSha256('XgwSnGZ1p', 'ts$ts');
-      try {
-        final tick = await dio.post(
-          'https://api.bilibili.com/bapis/bilibili.api.ticket.v1.Ticket/GenWebTicket',
-          queryParameters: {'key_id': 'ec02', 'hexsign': hexSign, 'context[ts]': '$ts', 'csrf': ''},
-        );
-        final td = (tick.data as Map<String, dynamic>)['data'] as Map<String, dynamic>?;
-        final t = td?['ticket'] as String?;
-        if (t != null && t.isNotEmpty) {
-          cookies['bili_ticket'] = t;
-          final created = (td?['created_at'] as int?) ?? ts;
-          final ttl = (td?['ttl'] as int?) ?? 1800;
-          _biliTicketExpires = created + ttl;
-          _biliTicketOk = true;
-        }
-      } catch (e) {
-        // ignore: avoid_print
-        print('[kzv] bili_ticket failed: $e');
-      }
-      cookies.addAll(savedLogin);
-      _fullCookies = cookies;
-      _buvidReady = true;
-      if (!_buvidActivated) {
-        _buvidActivated = true;
-        await _activateBuvid();
-      }
-      // ignore: avoid_print
-      print('[kzv] full cookies: ${cookies.keys.join(',')}');
-    } catch (e) {
-      // ignore: avoid_print
-      print('[kzv] _ensureBuvid failed: $e');
-    }
-  }
-
-  String _genAuroraEid(int uid) {
-    final midByte = utf8.encode(uid.toString());
-    const key = 'ad1va46a7lza';
-    for (var i = 0; i < midByte.length; i++) {
-      midByte[i] ^= key.codeUnitAt(i % key.length);
-    }
-    return base64.encode(midByte).replaceAll('=', '');
-  }
-
-  Map<String, String> _loginHeaders() {
-    final midStr = _fullCookies?['DedeUserID'] ?? '';
-    final mid = int.tryParse(midStr) ?? 0;
-    return {
-      if (mid > 0) 'x-bili-mid': midStr,
-      if (mid > 0) 'x-bili-aurora-eid': _genAuroraEid(mid),
-    };
-  }
-
-  Future<void> _activateBuvid() async {
-    try {
-      final jsonData = jsonEncode({
-        '3064': 1,
-        '39c8': '333.1387.fp.risk',
-        '3c43': {
-          'adca': 'Linux',
-          'bfe9': '${_hex(24)}IEND${_hex(4)}',
-        },
-      });
-      await dio.post(
-        '/x/internal/gaia-gateway/ExClimbWuzhi',
-        data: {'payload': jsonData},
-        options: Options(headers: {
-          ..._loginHeaders(),
-        }),
-      );
-      // ignore: avoid_print
-      print('[kzv] buvid activated');
-    } catch (e) {
-      // ignore: avoid_print
-      print('[kzv] buvid activate failed: $e');
-    }
-  }
-
-  bool _loggedIn = false;
-  bool _guestMode = false;
-  String _loginName = '';
-  int _loginAt = 0;
-  int _sessExpires = 0;
-
-  bool get isLoggedIn => _loggedIn && !_guestMode;
-  bool get hasAccount => _loggedIn;
-  bool get guestMode => _guestMode;
-  String get loginName => _loginName;
-  int get loginAt => _loginAt;
-  int get sessExpires => _sessExpires;
-
+  bool get isLoggedIn => client.isLoggedIn;
+  bool get hasAccount => client.hasAccount;
+  bool get guestMode => client.guestMode;
+  String get loginName => client.loginName;
+  int get loginAt => client.loginAt;
+  int get sessExpires => client.sessExpires;
   Future<void> setGuestMode(bool enabled) async {
-    _guestMode = enabled;
+    await client.setGuestMode(enabled);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('guest_mode', enabled);
   }
 
-  Map<String, String> _effectiveCookies() {
-    final all = _fullCookies ?? const <String, String>{};
-    if (!_guestMode) return all;
-    return Map.fromEntries(all.entries.where((e) => !const {'SESSDATA', 'bili_jct', 'DedeUserID', 'DedeUserID__ckMd5', 'sid'}.contains(e.key)));
-  }
+  final BilibiliClient client;
+  final Dio dio;
 
-  Map<String, String> _requestHeaders({Map<String, String> extra = const {}}) {
-    final cookies = _effectiveCookies();
-    final headers = <String, String>{
-      ..._loginHeaders(),
-      ...extra,
-    };
-    if (cookies.isNotEmpty) headers['Cookie'] = cookies.entries.map((e) => '${e.key}=${e.value}').join('; ');
-    return headers;
+  VideoRepository._(this.client) : dio = client.dio;
+
+  factory VideoRepository.create() {
+    return VideoRepository._(BilibiliClient(BilibiliClient.createDio()));
   }
 
   int _parseSessExpires(String sessdata) {
@@ -287,34 +103,34 @@ class VideoRepository {
   }
 
   Future<bool> loginWithCookie(String cookieHeader) async {
-    await _ensureBuvid();
+    await client.ensureBuvid();
     final parsed = _parseCookie(cookieHeader);
     if (!parsed.containsKey('SESSDATA') || parsed['SESSDATA']!.isEmpty) {
       return false;
     }
-    final before = Map<String, String>.from(_fullCookies ?? {});
-    final merged = Map<String, String>.from(_fullCookies ?? {});
+    final before = Map<String, String>.from(client.fullCookies ?? {});
+    final merged = Map<String, String>.from(client.fullCookies ?? {});
     merged.addAll(parsed);
-    _fullCookies = merged;
+    client.setFullCookies(merged);
     final ok = await _validateLogin();
     if (ok) {
-      _loginAt = DateTime.now().millisecondsSinceEpoch;
+      final loginAt = DateTime.now().millisecondsSinceEpoch;
       final sess = parsed['SESSDATA'] ?? '';
-      _sessExpires = _parseSessExpires(sess);
+      client.setLoginTimestamps(loginAt, _parseSessExpires(sess));
       const storage = FlutterSecureStorage();
       await storage.write(key: 'login_cookie', value: cookieHeader);
     } else {
-      _fullCookies = before;
+      client.setFullCookies(before);
     }
     return ok;
   }
 
   Future<bool> _validateLogin() async {
     try {
-      final hasSessdata = _fullCookies?.containsKey('SESSDATA') == true;
+      final hasSessdata = client.fullCookies?.containsKey('SESSDATA') == true;
       // ignore: avoid_print
-      print('[kzv] validate: hasSESSDATA=$hasSessdata keys=${_fullCookies?.keys.join(',')}');
-      final cookieHeader = _fullCookies?.entries.map((e) => '${e.key}=${e.value}').join('; ');
+      print('[kzv] validate: hasSESSDATA=$hasSessdata keys=${client.fullCookies?.keys.join(',')}');
+      final cookieHeader = client.fullCookies?.entries.map((e) => '${e.key}=${e.value}').join('; ');
       final resp = await dio.get('https://api.bilibili.com/x/web-interface/nav', options: Options(headers: {
         if (cookieHeader != null) 'Cookie': cookieHeader,
       }));
@@ -322,13 +138,7 @@ class VideoRepository {
       // ignore: avoid_print
       print('[kzv] nav code=${data['code']} isLogin=${data['data']?['isLogin']} uname=${data['data']?['uname']}');
       final isLogin = data['data']?['isLogin'] == true;
-      if (isLogin) {
-        _loggedIn = true;
-        _loginName = (data['data']?['uname'] as String?) ?? '';
-      } else {
-        _loggedIn = false;
-        _loginName = '';
-      }
+      client.setLoginState(isLogin, isLogin ? ((data['data']?['uname'] as String?) ?? '') : '');
       return isLogin;
     } catch (e) {
       // ignore: avoid_print
@@ -344,46 +154,27 @@ class VideoRepository {
       await loginWithCookie(saved);
     }
     final prefs = await SharedPreferences.getInstance();
-    _guestMode = prefs.getBool('guest_mode') ?? false;
+    await client.setGuestMode(prefs.getBool('guest_mode') ?? false);
   }
 
   Future<void> logout() async {
     const storage = FlutterSecureStorage();
     await storage.delete(key: 'login_cookie');
-    _loggedIn = false;
-    _loginName = '';
-    _loginAt = 0;
-    _sessExpires = 0;
-    if (_fullCookies != null) {
-      _fullCookies!.remove('SESSDATA');
-      _fullCookies!.remove('bili_jct');
-      _fullCookies!.remove('DedeUserID');
-      _fullCookies!.remove('DedeUserID__ckMd5');
-    }
+    client.setLoginState(false, '');
+    client.setLoginTimestamps(0, 0);
+    client.removeLoginCookies();
   }
 
   Future<Map<String, dynamic>> _wbiGet(String path, Map<String, dynamic> params) async {
-    await _ensureBuvid();
-    final mixinKey = await _getMixinKey();
-    final signed = Map<String, dynamic>.from(params);
-    WbiSign.sign(signed, mixinKey);
-    final resp = await dio.get(path, queryParameters: signed, options: Options(headers: _requestHeaders()));
-    final body = resp.data as Map<String, dynamic>;
-    final code = body['code'];
-    if (code is int && code != 0) {
-      // ignore: avoid_print
-      print('[kzv] wbi error $path code=$code msg=${body['message']}');
-      throw BilibiliApiException('${body['message'] ?? code}', code: code, path: path);
-    }
-    return body;
+    return client.wbiGet(path, params);
   }
 
   Future<List<VideoInfo>> _getRcmdVideos({int batch = 5}) async {
     try {
-      await _ensureBuvid();
+      await client.ensureBuvid();
       final all = <VideoInfo>[];
       for (var b = 0; b < batch && all.length < 60; b++) {
-        final resp = await dio.get('/x/web-interface/index/top/rcmd', queryParameters: {'fresh_type': 3, 'fresh_idx': b}, options: Options(headers: _requestHeaders()));
+        final resp = await dio.get('/x/web-interface/index/top/rcmd', queryParameters: {'fresh_type': 3, 'fresh_idx': b}, options: Options(headers: client.requestHeaders()));
         final body = resp.data as Map<String, dynamic>;
         final code = body['code'];
         if (code is int && code != 0) {
@@ -588,9 +379,7 @@ class VideoRepository {
     };
   }
 
-  String? get buvid3 {
-    return _fullCookies?['buvid3'];
-  }
+  String? get buvid3 => client.buvid3;
 
   Future<void> addBlacklist(VideoInfo v) async {
     final prefs = await SharedPreferences.getInstance();
@@ -731,8 +520,8 @@ class VideoRepository {
   Future<List<SearchUser>> searchUsers(String keyword) async {
     if (keyword.trim().isEmpty) return [];
     try {
-      await _ensureBuvid();
-      final mixinKey = await _getMixinKey();
+      await client.ensureBuvid();
+      final mixinKey = await client.getMixinKey();
       final params = <String, dynamic>{
         'search_type': 'bili_user',
         'keyword': keyword,
@@ -745,7 +534,7 @@ class VideoRepository {
       final enc = Uri.encodeComponent(keyword);
       final resp = await dio.get('/x/web-interface/wbi/search/type',
         queryParameters: params,
-        options: Options(headers: _requestHeaders(extra: {
+        options: Options(headers: client.requestHeaders(extra: {
           'origin': 'https://search.bilibili.com',
           'referer': 'https://search.bilibili.com/bili_user?keyword=$enc',
         })));
@@ -907,8 +696,4 @@ class VideoRepository {
     final now = DateTime.now();
     return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
   }
-}
-
-extension _FirstOrNull<E> on List<E> {
-  E? get firstOrNull => isEmpty ? null : first;
 }

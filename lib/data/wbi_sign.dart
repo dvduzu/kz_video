@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
-import 'package:dio/dio.dart';
 
 class WbiSign {
   static const _mixinKeyEncTab = <int>[

@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -13,9 +12,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-  final cookiePath = '${Directory.systemTemp.path}/kzv_cookies';
-  await Directory(cookiePath).create(recursive: true);
-  VideoRepository.init(VideoRepository.create(cookiePath));
+  VideoRepository.init(VideoRepository.create());
   VideoRepository.instance().restoreLogin();
   runApp(const MyApp());
 }
