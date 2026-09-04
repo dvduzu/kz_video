@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'app_sign.dart';
+import 'api_exception.dart';
 import 'models.dart';
 import 'wbi_sign.dart';
 
@@ -209,6 +210,16 @@ class VideoRepository {
     return Map.fromEntries(all.entries.where((e) => !const {'SESSDATA', 'bili_jct', 'DedeUserID', 'DedeUserID__ckMd5', 'sid'}.contains(e.key)));
   }
 
+  Map<String, String> _requestHeaders({Map<String, String> extra = const {}}) {
+    final cookies = _effectiveCookies();
+    final headers = <String, String>{
+      ..._loginHeaders(),
+      ...extra,
+    };
+    if (cookies.isNotEmpty) headers['Cookie'] = cookies.entries.map((e) => '${e.key}=${e.value}').join('; ');
+    return headers;
+  }
+
   int _parseSessExpires(String sessdata) {
     try {
       final decoded = utf8.decode(base64.decode(base64.normalize(sessdata)));
@@ -356,17 +367,13 @@ class VideoRepository {
     final mixinKey = await _getMixinKey();
     final signed = Map<String, dynamic>.from(params);
     WbiSign.sign(signed, mixinKey);
-    final cookieHeader = _effectiveCookies().entries.map((e) => '${e.key}=${e.value}').join('; ');
-    final resp = await dio.get(path, queryParameters: signed, options: Options(headers: {
-      if (cookieHeader != null) 'Cookie': cookieHeader,
-      ..._loginHeaders(),
-    }));
+    final resp = await dio.get(path, queryParameters: signed, options: Options(headers: _requestHeaders()));
     final body = resp.data as Map<String, dynamic>;
     final code = body['code'];
     if (code is int && code != 0) {
       // ignore: avoid_print
       print('[kzv] wbi error $path code=$code msg=${body['message']}');
-      throw Exception('B站返回错误 (${body['message'] ?? code})');
+      throw BilibiliApiException('${body['message'] ?? code}', code: code, path: path);
     }
     return body;
   }
@@ -374,13 +381,9 @@ class VideoRepository {
   Future<List<VideoInfo>> _getRcmdVideos({int batch = 5}) async {
     try {
       await _ensureBuvid();
-      final cookieHeader = _effectiveCookies().entries.map((e) => '${e.key}=${e.value}').join('; ');
       final all = <VideoInfo>[];
       for (var b = 0; b < batch && all.length < 60; b++) {
-        final resp = await dio.get('/x/web-interface/index/top/rcmd', queryParameters: {'fresh_type': 3, 'fresh_idx': batch}, options: Options(headers: {
-          if (cookieHeader != null) 'Cookie': cookieHeader,
-          ..._loginHeaders(),
-        }));
+        final resp = await dio.get('/x/web-interface/index/top/rcmd', queryParameters: {'fresh_type': 3, 'fresh_idx': b}, options: Options(headers: _requestHeaders()));
         final body = resp.data as Map<String, dynamic>;
         final code = body['code'];
         if (code is int && code != 0) {
@@ -739,22 +742,20 @@ class VideoRepository {
         'web_location': 1430654,
       };
       WbiSign.sign(params, mixinKey);
-      final cookieHeader = _effectiveCookies().entries.map((e) => '${e.key}=${e.value}').join('; ');
       final enc = Uri.encodeComponent(keyword);
       final resp = await dio.get('/x/web-interface/wbi/search/type',
         queryParameters: params,
-        options: Options(headers: {
-          if (cookieHeader != null) 'Cookie': cookieHeader,
+        options: Options(headers: _requestHeaders(extra: {
           'origin': 'https://search.bilibili.com',
           'referer': 'https://search.bilibili.com/bili_user?keyword=$enc',
-        }));
+        })));
       final body = resp.data as Map<String, dynamic>;
       final voucher = (body['data'] as Map<String, dynamic>?)?['v_voucher'] as String?;
       if (voucher != null && voucher.isNotEmpty) {
-        throw Exception('搜索触发风控，请登录后重试');
+        throw const BilibiliApiException('搜索触发风控，请登录后重试');
       }
       if (body['code'] is int && body['code'] != 0) {
-        throw Exception('B站返回错误 (${body['message'] ?? body['code']})');
+        throw BilibiliApiException('${body['message'] ?? body['code']}', code: body['code'] as int?);
       }
       final result = body['data']?['result'] as List? ?? [];
       return result.map((e) {
@@ -793,7 +794,11 @@ class VideoRepository {
         mid: mid,
         tid: (e['tid'] as int?) ?? 0,
       )).where((v) => v.bvid.isNotEmpty).toList();
-    } catch (_) { return []; }
+    } catch (e) {
+      // ignore: avoid_print
+      print('[kzv] getUpVideosWeb failed: $e');
+      return [];
+    }
   }
 
   Future<List<VideoInfo>> _getUpVideosApp(int mid, int tid) async {
@@ -820,7 +825,11 @@ class VideoRepository {
           tid: (e['tid'] as int?) ?? 0,
         );
       }).where((v) => v.bvid.isNotEmpty).toList();
-    } catch (_) { return []; }
+    } catch (e) {
+      // ignore: avoid_print
+      print('[kzv] getUpVideosApp failed: $e');
+      return [];
+    }
   }
 
   int _parseLength(String l) {
