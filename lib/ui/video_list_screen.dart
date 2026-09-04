@@ -1,9 +1,9 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 import '../data/models.dart';
 import '../data/video_repository.dart';
 import 'settings_page.dart';
+import 'subscription_sheet.dart';
 
 class VideoListScreen extends StatefulWidget {
   final void Function(VideoInfo) onPlay;
@@ -232,135 +232,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
   }
 
   Future<void> _showSubscriptions() async {
-    var followed = await VideoRepository.instance().getSubscriptions();
-    if (!mounted) return;
-    final searchCtl = TextEditingController();
-    final addCtl = TextEditingController();
-    var results = <SearchUser>[];
-    var searching = false;
-    var followedFilter = '';
-    var tabIndex = 0;
-    showModalBottomSheet(context: context, showDragHandle: true, isScrollControlled: true, builder: (ctx) => Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-      child: DefaultTabController(length: 2, child: StatefulBuilder(builder: (ctx, setSheet) => SizedBox(
-        height: MediaQuery.of(ctx).size.height * 0.7,
-        child: Column(children: [
-          ListTile(leading: const Icon(Icons.person_add_alt), title: Text('订阅管理 (${followed.length}/50)', style: Theme.of(ctx).textTheme.titleMedium)),
-          TabBar(
-            onTap: (i) => setSheet(() => tabIndex = i),
-            tabs: const [Tab(text: '已关注'), Tab(text: '添加UP')],
-          ),
-          if (tabIndex == 0) ...[
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: TextField(
-                controller: searchCtl,
-                decoration: const InputDecoration(hintText: '搜索已关注的 UP', isDense: true, prefixIcon: Icon(Icons.search, size: 20)),
-                onChanged: (v) => setSheet(() => followedFilter = v.trim()),
-              ),
-            ),
-            Expanded(child: ListView.builder(
-              itemCount: followed.length,
-              itemBuilder: (_, i) {
-                final s = followed[i];
-                if (followedFilter.isNotEmpty && !s.name.contains(followedFilter)) return const SizedBox.shrink();
-                return ListTile(
-                  title: Text(s.name.isEmpty ? 'UP ${s.mid}' : s.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-                  subtitle: Text('mid: ${s.mid}'),
-                  trailing: IconButton(icon: const Icon(Icons.delete_outline), onPressed: () async {
-                    await VideoRepository.instance().removeSubscription(s.mid);
-                    setSheet(() => followed.removeWhere((f) => f.mid == s.mid));
-                  }),
-                );
-              },
-            )),
-          ] else ...[
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: Row(children: [
-                Expanded(child: TextField(
-                  controller: addCtl,
-                  decoration: const InputDecoration(hintText: '搜索站内 UP 主', isDense: true, prefixIcon: Icon(Icons.search, size: 20)),
-                  onSubmitted: (_) async {
-                    setSheet(() { searching = true; results = []; });
-                    try {
-                      results = await VideoRepository.instance().searchUsers(addCtl.text.trim());
-                    } catch (_) {
-                      if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('搜索失败，请检查网络后重试')));
-                    }
-                    if (ctx.mounted) setSheet(() { searching = false; });
-                  },
-                )),
-                const SizedBox(width: 8),
-                IconButton(icon: const Icon(Icons.search), onPressed: () async {
-                  setSheet(() { searching = true; results = []; });
-                  try {
-                    results = await VideoRepository.instance().searchUsers(addCtl.text.trim());
-                  } catch (_) {
-                    if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('搜索失败，请检查网络后重试')));
-                  }
-                  if (ctx.mounted) setSheet(() { searching = false; });
-                }),
-              ]),
-            ),
-            if (searching)
-              const Expanded(child: Center(child: CircularProgressIndicator()))
-            else if (results.isNotEmpty)
-              Expanded(child: ListView.builder(
-                itemCount: results.length,
-                itemBuilder: (_, i) {
-                  final u = results[i];
-                  final isFollowed = followed.any((f) => f.mid == u.mid);
-                  return ListTile(
-                    title: Text(u.uname, maxLines: 1, overflow: TextOverflow.ellipsis),
-                    subtitle: Text('粉丝 ${u.fans} · ${u.sign}', maxLines: 1, overflow: TextOverflow.ellipsis),
-                    trailing: isFollowed
-                        ? IconButton(
-                            icon: Icon(Icons.check_circle, color: Theme.of(ctx).colorScheme.primary),
-                            tooltip: '取消关注',
-                            onPressed: () async {
-                              await VideoRepository.instance().removeSubscription(u.mid);
-                              setSheet(() => followed.removeWhere((f) => f.mid == u.mid));
-                              ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
-                                content: Text('已取消关注 ${u.uname}'),
-                                duration: const Duration(milliseconds: 1500),
-                                behavior: SnackBarBehavior.floating,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                              ));
-                            },
-                          )
-                        : IconButton(icon: const Icon(Icons.add), tooltip: '关注', onPressed: () async {
-                            final ok = await VideoRepository.instance().addSubscription(u.mid, u.uname, face: u.face);
-                            if (ctx.mounted) {
-                              if (ok) {
-                                setSheet(() {
-                                  followed.insert(0, (mid: u.mid, name: u.uname, face: u.face));
-                                });
-                                ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
-                                  content: Text('已关注 ${u.uname}'),
-                                  duration: const Duration(milliseconds: 1500),
-                                  behavior: SnackBarBehavior.floating,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                                ));
-                              } else {
-                                ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
-                                  content: const Text('订阅已满 50 人'),
-                                  duration: Duration(milliseconds: 1500),
-                                  behavior: SnackBarBehavior.floating,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                                ));
-                              }
-                            }
-                          }),
-                  );
-                },
-              ))
-            else
-              const Expanded(child: Center(child: Text('搜索添加 UP 主'))),
-          ],
-        ]),
-      )),
-    )));
+    showModalBottomSheet(context: context, showDragHandle: true, isScrollControlled: true, builder: (_) => const SubscriptionSheet());
   }
 
   void _showColorSettings() {
@@ -397,124 +269,6 @@ class _VideoListScreenState extends State<VideoListScreen> {
     )));
   }
 
-  Future<void> _showLogin() async {
-    final repo = VideoRepository.instance();
-    final loggedIn = repo.hasAccount;
-    if (loggedIn) {
-      String fmt(int ms) {
-        if (ms <= 0) return '未知';
-        final d = DateTime.fromMillisecondsSinceEpoch(ms);
-        return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')} ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
-      }
-      final loginAt = repo.loginAt;
-      final expires = repo.sessExpires > 0 ? DateTime.fromMillisecondsSinceEpoch(repo.sessExpires * 1000) : null;
-      showDialog(context: context, builder: (ctx) => AlertDialog(
-        title: const Text('登录状态'),
-        content: Text(
-          '账号：${repo.loginName.isEmpty ? 'B站账号' : repo.loginName}\n'
-          '当前：${repo.guestMode ? '游客模式' : '已登录'}\n'
-          '登录时间：${loginAt > 0 ? fmt(loginAt) : '未知'}\n'
-          '过期时间：${expires != null ? fmt(expires.millisecondsSinceEpoch) : '未知'}'
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('关闭')),
-          TextButton(onPressed: () async {
-            await repo.logout();
-            if (ctx.mounted) Navigator.pop(ctx);
-          }, child: const Text('退出登录')),
-        ],
-      ));
-      return;
-    }
-    showDialog(context: context, builder: (ctx) => AlertDialog(
-      title: const Text('登录'),
-      content: const Text('选择登录方式：'),
-      actions: [
-        TextButton(onPressed: () { Navigator.pop(ctx); _showQrLogin(); }, child: const Text('扫码登录')),
-        TextButton(onPressed: () { Navigator.pop(ctx); _showCookieLogin(); }, child: const Text('Cookie 登录')),
-        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
-      ],
-    ));
-  }
-
-  void _showCookieLogin() {
-    final repo = VideoRepository.instance();
-    final ctl = TextEditingController();
-    showDialog(context: context, builder: (ctx) => AlertDialog(
-      title: const Text('Cookie 登录'),
-      content: Column(mainAxisSize: MainAxisSize.min, children: [
-        const Text('从已登录 B 站网页的浏览器复制 Cookie（需含 SESSDATA），粘贴到下方：', style: TextStyle(fontSize: 13)),
-        const SizedBox(height: 12),
-        TextField(
-          controller: ctl,
-          maxLines: 4,
-          decoration: const InputDecoration(hintText: '粘贴 Cookie 字符串', border: OutlineInputBorder()),
-        ),
-      ]),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
-        FilledButton(onPressed: () async {
-          final ok = await repo.loginWithCookie(ctl.text.trim());
-          if (ctx.mounted) {
-            Navigator.pop(ctx);
-            ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(ok ? '登录成功' : '登录失败，请检查 Cookie 是否含 SESSDATA')));
-          }
-        }, child: const Text('登录')),
-      ],
-    ));
-  }
-
-  void _showQrLogin() {
-    final repo = VideoRepository.instance();
-    final qrUrl = ValueNotifier<String?>(null);
-    final status = ValueNotifier('正在获取二维码…');
-    showDialog(context: context, builder: (ctx) => ValueListenableBuilder<String?>(
-      valueListenable: qrUrl,
-      builder: (ctx, url, _) => AlertDialog(
-        title: const Text('扫码登录'),
-        content: SingleChildScrollView(child: SizedBox(
-          width: 260,
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            if (url != null) ...[
-              QrImageView(data: url, size: 200),
-              const SizedBox(height: 8),
-            ],
-            ValueListenableBuilder<String>(valueListenable: status, builder: (ctx, s, _) => Text(s, style: const TextStyle(fontSize: 13))),
-          ]),
-        )),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('关闭')),
-        ],
-      ),
-    ));
-    Future<void> start() async {
-      final gen = await repo.webQrGenerate();
-      if (gen == null) {
-        status.value = '获取二维码失败';
-        return;
-      }
-      qrUrl.value = gen.url;
-      status.value = '请用 B 站 App 扫码';
-      var tries = 0;
-      while (tries < 90) {
-        await Future<void>.delayed(const Duration(seconds: 2));
-        if (mounted) {
-          final ok = await repo.webQrPoll(gen.key);
-          if (ok) {
-            status.value = '登录成功';
-            await Future<void>.delayed(const Duration(milliseconds: 500));
-            if (context.mounted) Navigator.pop(context);
-            return;
-          }
-          tries++;
-        } else {
-          return;
-        }
-      }
-      status.value = '二维码已过期，请重新获取';
-    }
-    start();
-  }
 
   Future<void> _showBlacklist() async {
     final items = await VideoRepository.instance().getBlacklistItems();
@@ -546,7 +300,6 @@ class _VideoListScreenState extends State<VideoListScreen> {
     final changed = await Navigator.push<bool>(context, MaterialPageRoute(
       builder: (_) => SettingsPage(
         onOpenColorSettings: _showColorSettings,
-        onOpenLogin: _showLogin,
         onOpenSubscriptions: _showSubscriptions,
         onOpenBlacklist: _showBlacklist,
       ),

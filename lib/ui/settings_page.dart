@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/video_repository.dart';
+import 'login_sheet.dart';
 
 class SettingsPage extends StatefulWidget {
   final VoidCallback onOpenColorSettings;
-  final VoidCallback onOpenLogin;
   final VoidCallback onOpenSubscriptions;
   final VoidCallback onOpenBlacklist;
-  const SettingsPage({super.key, required this.onOpenColorSettings, required this.onOpenLogin, required this.onOpenSubscriptions, required this.onOpenBlacklist});
+  const SettingsPage({super.key, required this.onOpenColorSettings, required this.onOpenSubscriptions, required this.onOpenBlacklist});
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -137,7 +137,7 @@ class _SettingsPageState extends State<SettingsPage> {
             leading: Icon(repo.hasAccount ? Icons.account_circle : Icons.login),
             title: Text(repo.hasAccount ? '登录状态：${repo.loginName}' : '登录'),
             subtitle: const Text('扫码登录 / Cookie 登录'),
-            onTap: widget.onOpenLogin,
+            onTap: () => showLoginDialog(context),
           ),
           if (repo.hasAccount)
             Padding(
