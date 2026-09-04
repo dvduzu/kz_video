@@ -41,6 +41,7 @@ dependencies:
   media_kit: ^1.2.0
   media_kit_video: ^1.2.5
   media_kit_libs_video: ^1.0.5
+  dynamic_color: ^1.7.0
 
 dev_dependencies:
   flutter_test:

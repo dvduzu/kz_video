@@ -4,6 +4,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/models.dart';
 import '../data/video_repository.dart';
+import 'settings_page.dart';
 
 class VideoListScreen extends StatefulWidget {
   final void Function(VideoInfo) onPlay;
@@ -399,11 +400,23 @@ class _VideoListScreenState extends State<VideoListScreen> {
 
   Future<void> _showLogin() async {
     final repo = VideoRepository.instance();
-    final loggedIn = repo.isLoggedIn;
+    final loggedIn = repo.hasAccount;
     if (loggedIn) {
+      String fmt(int ms) {
+        if (ms <= 0) return '未知';
+        final d = DateTime.fromMillisecondsSinceEpoch(ms);
+        return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')} ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+      }
+      final loginAt = repo.loginAt;
+      final expires = repo.sessExpires > 0 ? DateTime.fromMillisecondsSinceEpoch(repo.sessExpires * 1000) : null;
       showDialog(context: context, builder: (ctx) => AlertDialog(
         title: const Text('登录状态'),
-        content: Text('已登录：${repo.loginName.isEmpty ? 'B站账号' : repo.loginName}'),
+        content: Text(
+          '账号：${repo.loginName.isEmpty ? 'B站账号' : repo.loginName}\n'
+          '当前：${repo.guestMode ? '游客模式' : '已登录'}\n'
+          '登录时间：${loginAt > 0 ? fmt(loginAt) : '未知'}\n'
+          '过期时间：${expires != null ? fmt(expires.millisecondsSinceEpoch) : '未知'}'
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('关闭')),
           TextButton(onPressed: () async {
@@ -531,150 +544,14 @@ class _VideoListScreenState extends State<VideoListScreen> {
   }
 
   Future<void> _showSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    final minDuration = prefs.getInt('setting_min_duration') ?? 600;
-    final rid = prefs.getString('setting_rid') ?? '';
-    final history = prefs.getBool('setting_history') ?? true;
-    final watchLater = prefs.getBool('setting_watch_later') ?? true;
-    final rcmdEnabled = prefs.getBool('setting_rcmd_enabled') ?? false;
-    final rcmdBatch = prefs.getInt('setting_rcmd_batch') ?? 5;
-    final rcmdRids = prefs.getStringList('setting_rcmd_rids') ?? const ['', 'tech', 'edu', 'life', 'game', 'ent', 'music'];
-    if (!mounted) return;
-    final result = await showModalBottomSheet<({int minDuration, String rid, bool history, bool watchLater, bool rcmdEnabled, int rcmdBatch, List<String> rcmdRids})>(
-      context: context, showDragHandle: true, isScrollControlled: true,
-      builder: (ctx) {
-        var selDur = minDuration;
-        var selRid = rid;
-        var selHistory = history;
-        var selWatchLater = watchLater;
-        var selRcmd = rcmdEnabled;
-        var selBatch = rcmdBatch;
-        var selRids = rcmdRids.toSet();
-        const durs = {600: '10 分钟', 1200: '20 分钟', 1800: '30 分钟'};
-        const rids = {'': '全部', 'tech': '科技', 'edu': '知识', 'life': '美食', 'game': '游戏', 'ent': '娱乐', 'music': '音乐', 'sub': '订阅'};
-        return StatefulBuilder(builder: (ctx, setModalState) => SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('分区', style: TextStyle(fontWeight: FontWeight.bold)),
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 2),
-              child: Text('按分区排行拉取，非本地过滤', style: TextStyle(fontSize: 12, color: Colors.grey)),
-            ),
-            Wrap(spacing: 8, children: rids.entries.map((e) => ChoiceChip(
-              label: Text(e.value),
-              selected: selRid == e.key,
-              onSelected: (_) => setModalState(() => selRid = e.key),
-            )).toList()),
-            const SizedBox(height: 16),
-            const Text('长视频阈值', style: TextStyle(fontWeight: FontWeight.bold)),
-            Wrap(spacing: 8, children: durs.entries.map((e) => ChoiceChip(
-              label: Text(e.value),
-              selected: selDur == e.key,
-              onSelected: (_) => setModalState(() => selDur = e.key),
-            )).toList()),
-            const Divider(height: 24),
-            SwitchListTile(
-              title: const Text('个性化推荐'),
-              subtitle: const Text('全部分区下使用账号个性化推荐（登录后生效）'),
-              value: selRcmd,
-              onChanged: (v) => setModalState(() => selRcmd = v),
-            ),
-            if (selRcmd)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: Row(children: [
-                  const Text('推荐拉取批数', style: TextStyle(fontSize: 13)),
-                  const SizedBox(width: 12),
-                  Wrap(spacing: 8, children: [1, 3, 5, 8].map((b) => ChoiceChip(
-                    label: Text('$b'),
-                    selected: selBatch == b,
-                    onSelected: (_) => setModalState(() => selBatch = b),
-                  )).toList()),
-                ]),
-              ),
-            if (selRcmd)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Text('个性化分区', style: TextStyle(fontSize: 13)),
-                  const SizedBox(height: 6),
-                  Wrap(spacing: 8, children: const {
-                    '': '全部',
-                    'tech': '科技',
-                    'edu': '知识',
-                    'life': '美食',
-                    'game': '游戏',
-                    'ent': '娱乐',
-                    'music': '音乐',
-                  }.entries.map((e) => Builder(builder: (ctx) => FilterChip(
-                    label: Text(e.value),
-                    selected: selRids.contains(e.key),
-                    onSelected: (sel) => setModalState(() {
-                      if (sel) { selRids.add(e.key); } else { selRids.remove(e.key); }
-                    }),
-                  ))).toList()),
-                ]),
-              ),
-            const Divider(height: 24),
-            ListTile(
-              leading: const Icon(Icons.palette_outlined),
-              title: const Text('颜色设置'),
-              subtitle: const Text('深浅模式 / 色调'),
-              onTap: () { Navigator.pop(ctx); _showColorSettings(); },
-            ),
-            ListTile(
-              leading: Icon(VideoRepository.instance().isLoggedIn ? Icons.account_circle : Icons.login),
-              title: Text(VideoRepository.instance().isLoggedIn ? '登录状态：${VideoRepository.instance().loginName}' : '登录'),
-              subtitle: const Text('扫码登录 / Cookie 登录'),
-              onTap: () { Navigator.pop(ctx); _showLogin(); },
-            ),
-            ListTile(
-              leading: const Icon(Icons.person_add_alt),
-              title: const Text('订阅管理'),
-              subtitle: const Text('关注 UP 主，推荐会包含他们的新视频'),
-              onTap: () { Navigator.pop(ctx); _showSubscriptions(); },
-            ),
-            SwitchListTile(
-              title: const Text('历史记录'),
-              subtitle: const Text('记住看过的视频'),
-              value: selHistory,
-              onChanged: (v) => setModalState(() => selHistory = v),
-            ),
-            SwitchListTile(
-              title: const Text('稍后再看'),
-              subtitle: const Text('收藏到稍后队列'),
-              value: selWatchLater,
-              onChanged: (v) => setModalState(() => selWatchLater = v),
-            ),
-            ListTile(
-              leading: const Icon(Icons.block),
-              title: const Text('管理黑名单'),
-              subtitle: const Text('查看/移除已跳过的视频'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _showBlacklist();
-              },
-            ),
-            const Divider(height: 8),
-            const SizedBox(height: 8),
-            SizedBox(width: double.infinity, child: FilledButton(
-              onPressed: () => Navigator.pop(ctx, (minDuration: selDur, rid: selRid, history: selHistory, watchLater: selWatchLater, rcmdEnabled: selRcmd, rcmdBatch: selBatch, rcmdRids: selRids.toList())),
-              child: const Text('应用'),
-            )),
-            const SizedBox(height: 8),
-          ]),
-        ));
-      },
-    );
-    if (result != null) {
-      await prefs.setInt('setting_min_duration', result.minDuration);
-      await prefs.setString('setting_rid', result.rid);
-      await prefs.setBool('setting_history', result.history);
-      await prefs.setBool('setting_watch_later', result.watchLater);
-      await prefs.setBool('setting_rcmd_enabled', result.rcmdEnabled);
-      await prefs.setInt('setting_rcmd_batch', result.rcmdBatch);
-      await prefs.setStringList('setting_rcmd_rids', result.rcmdRids);
-      await _load(force: true);
-    }
+    final changed = await Navigator.push<bool>(context, MaterialPageRoute(
+      builder: (_) => SettingsPage(
+        onOpenColorSettings: _showColorSettings,
+        onOpenLogin: _showLogin,
+        onOpenSubscriptions: _showSubscriptions,
+        onOpenBlacklist: _showBlacklist,
+      ),
+    ));
+    if (changed == true && mounted) await _load(force: true);
   }
 }

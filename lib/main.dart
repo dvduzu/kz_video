@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
@@ -66,14 +67,17 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
-    final seedColor = seed ?? const Color(0xFF6750A4);
-    return MaterialApp(
-      title: 'KzVideo',
-      theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: seedColor), useMaterial3: true, snackBarTheme: _snackBarTheme(Brightness.light, seedColor)),
-      darkTheme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: seedColor, brightness: Brightness.dark), useMaterial3: true, snackBarTheme: _snackBarTheme(Brightness.dark, seedColor)),
-      themeMode: mode,
-      home: App(mode: mode, onToggleTheme: toggle, seed: seed, onSetTheme: setTheme),
-    );
+    return DynamicColorBuilder(builder: (lightDynamic, darkDynamic) {
+      final isDark = WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark;
+      final seedColor = seed ?? ((isDark ? darkDynamic : lightDynamic)?.primary ?? const Color(0xFF6750A4));
+      return MaterialApp(
+        title: 'KzVideo',
+        theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: seedColor), useMaterial3: true, snackBarTheme: _snackBarTheme(Brightness.light, seedColor)),
+        darkTheme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: seedColor, brightness: Brightness.dark), useMaterial3: true, snackBarTheme: _snackBarTheme(Brightness.dark, seedColor)),
+        themeMode: mode,
+        home: App(mode: mode, onToggleTheme: toggle, seed: seed, onSetTheme: setTheme),
+      );
+    });
   }
 
   void toggle() {

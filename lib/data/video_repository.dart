@@ -185,10 +185,38 @@ class VideoRepository {
   }
 
   bool _loggedIn = false;
+  bool _guestMode = false;
   String _loginName = '';
+  int _loginAt = 0;
+  int _sessExpires = 0;
 
-  bool get isLoggedIn => _loggedIn;
+  bool get isLoggedIn => _loggedIn && !_guestMode;
+  bool get hasAccount => _loggedIn;
+  bool get guestMode => _guestMode;
   String get loginName => _loginName;
+  int get loginAt => _loginAt;
+  int get sessExpires => _sessExpires;
+
+  Future<void> setGuestMode(bool enabled) async {
+    _guestMode = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('guest_mode', enabled);
+  }
+
+  Map<String, String> _effectiveCookies() {
+    final all = _fullCookies ?? const <String, String>{};
+    if (!_guestMode) return all;
+    return Map.fromEntries(all.entries.where((e) => !const {'SESSDATA', 'bili_jct', 'DedeUserID', 'DedeUserID__ckMd5', 'sid'}.contains(e.key)));
+  }
+
+  int _parseSessExpires(String sessdata) {
+    try {
+      final decoded = utf8.decode(base64.decode(base64.normalize(sessdata)));
+      final parts = decoded.split('.');
+      if (parts.length >= 3) return int.tryParse(parts[2]) ?? 0;
+    } catch (_) {}
+    return 0;
+  }
 
   Map<String, String> _parseCookie(String cookieHeader) {
     const skip = {'path', 'domain', 'expires', 'max-age', 'samesite', 'httponly', 'secure', 'priority', 'partitioned'};
@@ -259,6 +287,9 @@ class VideoRepository {
     _fullCookies = merged;
     final ok = await _validateLogin();
     if (ok) {
+      _loginAt = DateTime.now().millisecondsSinceEpoch;
+      final sess = parsed['SESSDATA'] ?? '';
+      _sessExpires = _parseSessExpires(sess);
       const storage = FlutterSecureStorage();
       await storage.write(key: 'login_cookie', value: cookieHeader);
     } else {
@@ -301,6 +332,8 @@ class VideoRepository {
     if (saved != null && saved.isNotEmpty) {
       await loginWithCookie(saved);
     }
+    final prefs = await SharedPreferences.getInstance();
+    _guestMode = prefs.getBool('guest_mode') ?? false;
   }
 
   Future<void> logout() async {
@@ -308,6 +341,8 @@ class VideoRepository {
     await storage.delete(key: 'login_cookie');
     _loggedIn = false;
     _loginName = '';
+    _loginAt = 0;
+    _sessExpires = 0;
     if (_fullCookies != null) {
       _fullCookies!.remove('SESSDATA');
       _fullCookies!.remove('bili_jct');
@@ -321,7 +356,7 @@ class VideoRepository {
     final mixinKey = await _getMixinKey();
     final signed = Map<String, dynamic>.from(params);
     WbiSign.sign(signed, mixinKey);
-    final cookieHeader = _fullCookies?.entries.map((e) => '${e.key}=${e.value}').join('; ');
+    final cookieHeader = _effectiveCookies().entries.map((e) => '${e.key}=${e.value}').join('; ');
     final resp = await dio.get(path, queryParameters: signed, options: Options(headers: {
       if (cookieHeader != null) 'Cookie': cookieHeader,
       ..._loginHeaders(),
@@ -339,7 +374,7 @@ class VideoRepository {
   Future<List<VideoInfo>> _getRcmdVideos({int batch = 5}) async {
     try {
       await _ensureBuvid();
-      final cookieHeader = _fullCookies?.entries.map((e) => '${e.key}=${e.value}').join('; ');
+      final cookieHeader = _effectiveCookies().entries.map((e) => '${e.key}=${e.value}').join('; ');
       final all = <VideoInfo>[];
       for (var b = 0; b < batch && all.length < 60; b++) {
         final resp = await dio.get('/x/web-interface/index/top/rcmd', queryParameters: {'fresh_type': 3, 'fresh_idx': batch}, options: Options(headers: {
@@ -406,7 +441,7 @@ class VideoRepository {
       final rcmdOn = prefs.getBool('setting_rcmd_enabled') ?? false;
       final rcmdRids = (prefs.getStringList('setting_rcmd_rids') ?? const ['', 'tech', 'edu', 'life', 'game', 'ent', 'music']).toSet();
       if (rcmdOn && rcmdRids.contains(ridKey)) {
-        final batch = prefs.getInt('setting_rcmd_batch') ?? 5;
+        final batch = prefs.getInt('setting_rcmd_batch') ?? 3;
         final rcmdVideos = await _getRcmdVideos(batch: batch);
         final rcmdFiltered = rcmdVideos.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid)).toList();
         // ignore: avoid_print
@@ -704,7 +739,7 @@ class VideoRepository {
         'web_location': 1430654,
       };
       WbiSign.sign(params, mixinKey);
-      final cookieHeader = _fullCookies?.entries.map((e) => '${e.key}=${e.value}').join('; ');
+      final cookieHeader = _effectiveCookies().entries.map((e) => '${e.key}=${e.value}').join('; ');
       final enc = Uri.encodeComponent(keyword);
       final resp = await dio.get('/x/web-interface/wbi/search/type',
         queryParameters: params,
