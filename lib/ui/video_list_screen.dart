@@ -24,12 +24,25 @@ class _VideoListScreenState extends State<VideoListScreen> {
   String? error;
   bool loading = true;
   bool editing = false;
+  int _titleTaps = 0;
   final Set<String> selected = {};
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  Future<void> _onTitleTap() async {
+    _titleTaps++;
+    if (_titleTaps >= 10) {
+      _titleTaps = 0;
+      final unlimited = !widget.repo.unlimitedRefresh;
+      await widget.repo.setUnlimitedRefresh(unlimited);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(unlimited ? 'debug' : 'release')));
+      }
+    }
   }
 
   Future<void> _onRefresh() async {
@@ -79,7 +92,10 @@ class _VideoListScreenState extends State<VideoListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(editing ? '已选择 ${selected.length} 项' : '今日精选 · ${_today()}'),
+        title: GestureDetector(
+          onTap: editing ? null : _onTitleTap,
+          child: Text(editing ? '已选择 ${selected.length} 项' : '今日精选 · ${_today()}'),
+        ),
         leading: editing
             ? IconButton(icon: const Icon(Icons.close), onPressed: _exitEditing)
             : null,
@@ -93,7 +109,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
               ]
             : [
                 IconButton(icon: const Icon(Icons.history), tooltip: '历史', onPressed: _showHistory),
-                IconButton(icon: const Icon(Icons.bookmarks_outlined), tooltip: '稍后再看', onPressed: _showWatchLater),
+                IconButton(icon: const Icon(Icons.bookmarks_outlined), tooltip: '收藏', onPressed: _showWatchLater),
                 IconButton(icon: const Icon(Icons.settings_outlined), tooltip: '设置', onPressed: _showSettings),
               ],
       ),
@@ -199,10 +215,10 @@ class _VideoListScreenState extends State<VideoListScreen> {
 
   Future<void> _showWatchLater() async {
     if (!await widget.repo.isWatchLaterEnabled()) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('稍后再看已在设置中关闭')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('收藏已在设置中关闭')));
       return;
     }
-    await _showCollection('稍后再看', widget.repo.getWatchLater, Icons.bookmarks_outlined);
+    await _showCollection('收藏', widget.repo.getWatchLater, Icons.bookmarks_outlined);
   }
 
   Future<void> _showCollection(String title, Future<List<VideoInfo>> Function() loader, IconData icon) async {
@@ -219,7 +235,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
             final v = items[i];
             return ListTile(
               title: Text(v.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-              trailing: title == '稍后再看' ? IconButton(icon: const Icon(Icons.close), onPressed: () async {
+              trailing: title == '收藏' ? IconButton(icon: const Icon(Icons.close), onPressed: () async {
                 await widget.repo.removeWatchLater(v.bvid);
                 if (ctx.mounted) Navigator.pop(ctx);
                 _showWatchLater();
@@ -298,7 +314,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
   }
 
   Future<void> _showSettings() async {
-    final changed = await Navigator.push<bool>(context, MaterialPageRoute(
+    await Navigator.push<bool>(context, MaterialPageRoute(
       builder: (_) => SettingsPage(
         repo: widget.repo,
         onOpenColorSettings: _showColorSettings,
@@ -306,6 +322,5 @@ class _VideoListScreenState extends State<VideoListScreen> {
         onOpenBlacklist: _showBlacklist,
       ),
     ));
-    if (changed == true && mounted) await _load(force: true);
   }
 }

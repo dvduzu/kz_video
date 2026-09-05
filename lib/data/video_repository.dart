@@ -164,8 +164,11 @@ class VideoRepository {
   }
 
   Future<bool> canRefreshToday() async {
-    return store.getRefreshCount(_today()) < 5;
+    return store.unlimitedRefresh || store.getRefreshCount(_today()) < 5;
   }
+
+  bool get unlimitedRefresh => store.unlimitedRefresh;
+  Future<void> setUnlimitedRefresh(bool v) => store.setUnlimitedRefresh(v);
 
   Future<void> recordRefresh() async {
     final today = _today();

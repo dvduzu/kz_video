@@ -77,4 +77,6 @@ class LocalStore {
 
   int getRefreshCount(String today) => _p.getInt('refresh_count_$today') ?? 0;
   Future<void> setRefreshCount(String today, int v) => _p.setInt('refresh_count_$today', v);
+  bool get unlimitedRefresh => _p.getBool('debug_unlimited_refresh') ?? false;
+  Future<void> setUnlimitedRefresh(bool v) => _p.setBool('debug_unlimited_refresh', v);
 }

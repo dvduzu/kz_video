@@ -368,20 +368,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       ),
                     if (watchLaterEnabled)
 IconButton(
-                      tooltip: watchLaterAdded ? '取消稍后再看' : '稍后再看',
+                      tooltip: watchLaterAdded ? '取消收藏' : '收藏',
                       icon: Icon(watchLaterAdded ? Icons.bookmark : Icons.bookmark_add_outlined, color: watchLaterAdded ? Theme.of(context).colorScheme.primary : Colors.white),
                       onPressed: () async {
                         if (watchLaterAdded) {
                           await widget.repo.removeWatchLater(widget.video.bvid);
                           if (mounted) {
                             setState(() => watchLaterAdded = false);
-                            _toast('已取消稍后再看');
+                            _toast('已取消收藏');
                           }
                         } else {
                           await widget.repo.addWatchLater(widget.video);
                           if (mounted) {
                             setState(() => watchLaterAdded = true);
-                            _toast('已加入稍后再看');
+                            _toast('已加入收藏');
                           }
                         }
                       },

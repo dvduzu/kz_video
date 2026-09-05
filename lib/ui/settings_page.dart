@@ -163,7 +163,7 @@ class _SettingsPageState extends State<SettingsPage> {
             onChanged: (v) => setState(() => _history = v),
           ),
           SwitchListTile(
-            title: const Text('稍后再看'),
+            title: const Text('收藏'),
             subtitle: const Text('收藏到稍后队列'),
             value: _watchLater,
             onChanged: (v) => setState(() => _watchLater = v),
@@ -173,17 +173,6 @@ class _SettingsPageState extends State<SettingsPage> {
             title: const Text('管理黑名单'),
             subtitle: const Text('查看/移除已跳过的视频'),
             onTap: widget.onOpenBlacklist,
-          ),
-          ListTile(
-            leading: const Icon(Icons.refresh),
-            title: const Text('重置刷新次数'),
-            subtitle: const Text('Debug：清空今日每日推荐刷新限制'),
-            onTap: () async {
-              await widget.repo.resetRefreshCount();
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已重置今日刷新次数')));
-              }
-            },
           ),
           const SizedBox(height: 16),
         ],
