@@ -117,14 +117,15 @@ class VideoRepository {
     await store.setHistory(list);
   }
 
-  Future<void> addWatchLater(VideoInfo v) async {
-    if (!await isWatchLaterEnabled()) return;
+  Future<bool> addWatchLater(VideoInfo v) async {
+    if (!await isWatchLaterEnabled()) return false;
     final list = store.watchLater;
     if (!list.any((e) => e['bvid'] == v.bvid)) {
+      if (list.length >= LocalStore.maxWatchLaterItems) return false;
       list.add(v.toJson());
-      if (list.length > LocalStore.maxWatchLaterItems) list.removeRange(LocalStore.maxWatchLaterItems, list.length);
       await store.setWatchLater(list);
     }
+    return true;
   }
 
   Future<List<VideoInfo>> getWatchLater() async {

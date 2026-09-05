@@ -382,10 +382,14 @@ IconButton(
                             _toast('已取消收藏');
                           }
                         } else {
-                          await widget.repo.addWatchLater(widget.video);
+                          final ok = await widget.repo.addWatchLater(widget.video);
                           if (mounted) {
-                            setState(() => watchLaterAdded = true);
-                            _toast('已加入收藏');
+                            if (ok) {
+                              setState(() => watchLaterAdded = true);
+                              _toast('已加入收藏');
+                            } else {
+                              _toast('收藏已满 50');
+                            }
                           }
                         }
                       },

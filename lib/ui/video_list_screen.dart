@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../data/models.dart';
+import '../data/local_store.dart';
 import '../data/video_repository.dart';
 import 'settings_page.dart';
 import 'subscription_sheet.dart';
@@ -298,7 +299,7 @@ class VideoListScreenState extends State<VideoListScreen> {
       child: Column(children: [
         ListTile(
           leading: Icon(icon),
-          title: Text(selectMode ? '已选择 ${selectedSet.length} 项' : title, style: Theme.of(ctx).textTheme.titleMedium),
+          title: Text(selectMode ? '已选择 ${selectedSet.length} 项' : (title == '收藏' ? '收藏 (${items.length}/${LocalStore.maxWatchLaterItems})' : title), style: Theme.of(ctx).textTheme.titleMedium),
           trailing: selectMode
               ? Row(mainAxisSize: MainAxisSize.min, children: [
                   TextButton.icon(

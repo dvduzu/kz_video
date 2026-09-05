@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../data/video_repository.dart';
 import 'login_sheet.dart';
 
@@ -75,6 +76,22 @@ class _SettingsPageState extends State<SettingsPage> {
     await s.setRcmdBatch(_rcmdBatch);
     await widget.repo.setGuestMode(_guestMode);
     return changed;
+  }
+
+  void _showAbout() {
+    PackageInfo.fromPlatform().then((info) {
+      if (!mounted) return;
+      showDialog(context: context, builder: (ctx) => AlertDialog(
+        title: const Text('关于'),
+        content: Text(
+          'KzVideo\n'
+          '版本：${info.version} (${info.buildNumber})\n'
+          '克制的 B 站视频客户端\n\n'
+          'GitHub：github.com/dvduzu/kz_video'
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('关闭'))],
+      ));
+    });
   }
 
   @override
@@ -185,6 +202,12 @@ class _SettingsPageState extends State<SettingsPage> {
             subtitle: const Text('收藏到稍后队列'),
             value: _watchLater,
             onChanged: (v) => setState(() => _watchLater = v),
+          ),
+          ListTile(
+            leading: const Icon(Icons.info_outline),
+            title: const Text('关于'),
+            subtitle: const Text('版本信息 / 项目仓库'),
+            onTap: _showAbout,
           ),
           const SizedBox(height: 16),
         ],
