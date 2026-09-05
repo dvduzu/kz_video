@@ -92,7 +92,7 @@ class VideoApi {
     final body = resp.data as Map<String, dynamic>;
     final voucher = (body['data'] as Map<String, dynamic>?)?['v_voucher'] as String?;
     if (voucher != null && voucher.isNotEmpty) {
-      throw const BilibiliApiException('搜索触发风控，请登录后重试');
+      throw const RiskControlException('搜索触发风控，请登录后重试');
     }
     if (body['code'] is int && body['code'] != 0) {
       throw BilibiliApiException('${body['message'] ?? body['code']}', code: body['code'] as int?);

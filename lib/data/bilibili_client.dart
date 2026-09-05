@@ -41,6 +41,12 @@ class BilibiliClient {
     final code = body['code'];
     if (code is int && code != 0) {
       KzvLogger.warning('wbi error $path code=$code msg=${body['message']}');
+      if (code == -101) {
+        throw AuthException('${body['message'] ?? code}', code: code);
+      }
+      if (code == -352 || code == -412) {
+        throw RiskControlException('${body['message'] ?? code}', path: path);
+      }
       throw BilibiliApiException('${body['message'] ?? code}', code: code, path: path);
     }
     return body;
