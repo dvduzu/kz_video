@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'api_exception.dart';
 import 'app_sign.dart';
 import 'bilibili_client.dart';
+import 'bilibili_constants.dart';
 import 'models.dart';
 import '../core/logger.dart';
 
@@ -20,7 +21,7 @@ class VideoApi {
     final cid = viewData['data']?['cid'];
     if (cid == null) throw Exception('获取视频信息失败');
     final requested = qn != null ? [qn] : [80, 64, 32];
-    String? lastError;
+    final errors = <String>[];
     for (final q in requested) {
       for (final fnval in [1, 0]) {
         try {
@@ -41,11 +42,11 @@ class VideoApi {
             return durl.first['url'] as String;
           }
         } catch (e) {
-          lastError = e.toString();
+          errors.add('qn=$q fnval=$fnval: ${e.toString()}');
         }
       }
     }
-    throw Exception('获取播放地址失败（无可用 durl）：$lastError');
+    throw Exception('获取播放地址失败（无可用 durl）：${errors.join(' | ')}');
   }
 
   Map<String, dynamic> _dmImgParams() {
@@ -56,6 +57,8 @@ class VideoApi {
     final gpu = gpus[r.nextInt(gpus.length)];
     final webgl = 'WebGL 1.0 (OpenGL ES 2.0 Chromium)';
     final angle = 'ANGLE ($vendor, $gpu Direct3D11 vs_5_0 ps_5_0, D3D11)Google Inc. ($vendor)';
+    // 模拟常见浏览器窗口分辨率抖动范围（1920±60 宽、1080±90 高），
+    // 以及随机渲染偏移量 of/o 与整体随机种子 rnd，用于通过 B 站播放接口的 dm_img 风控校验
     final w = 1920 - 60 - r.nextInt(60);
     final h = 1080 - 90 - r.nextInt(60);
     final rnd = r.nextInt(114);
@@ -142,7 +145,7 @@ class VideoApi {
       final params = <String, dynamic>{'vmid': mid, 'order': 'pubdate', 'tid': tid, 'mobi_app': 'android'};
       AppSign.appSign(params);
       final resp = await dio.get('https://app.bilibili.com/x/v2/space/archive/cursor', queryParameters: params, options: Options(headers: {
-        'User-Agent': 'Mozilla/5.0 BiliDroid/8.43.0 (bbcallen@gmail.com) os/android model/android mobi_app/android build/8430300 channel/master innerVer/8430300 osVer/15 network/2',
+        'User-Agent': BiliConstants.appUserAgent,
         'Referer': 'https://www.bilibili.com/',
       }));
       final items = (resp.data?['data']?['item'] as List?) ?? [];

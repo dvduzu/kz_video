@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../data/video_repository.dart';
 import 'login_sheet.dart';
 
@@ -15,7 +14,6 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  final _prefs = SharedPreferences.getInstance();
   late int _minDuration;
   late String _rid;
   late bool _history;
@@ -36,28 +34,28 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _load() async {
-    final prefs = await _prefs;
+    final s = widget.repo.settings;
     setState(() {
-      _minDuration = prefs.getInt('setting_min_duration') ?? 600;
-      _rid = prefs.getString('setting_rid') ?? '';
-      _history = prefs.getBool('setting_history') ?? true;
-      _watchLater = prefs.getBool('setting_watch_later') ?? true;
-      _rcmdEnabled = prefs.getBool('setting_rcmd_enabled') ?? false;
-      _rcmdBatch = prefs.getInt('setting_rcmd_batch') ?? 3;
-      _rcmdRids = (prefs.getStringList('setting_rcmd_rids') ?? const ['', 'tech', 'edu', 'life', 'game', 'ent', 'music']).toSet();
-      _guestMode = prefs.getBool('guest_mode') ?? false;
+      _minDuration = s.minDuration;
+      _rid = s.rid;
+      _history = s.isHistoryEnabled;
+      _watchLater = s.isWatchLaterEnabled;
+      _rcmdEnabled = s.rcmdEnabled;
+      _rcmdBatch = s.rcmdBatch;
+      _rcmdRids = s.rcmdRids.toSet();
+      _guestMode = s.guestMode;
     });
   }
 
   Future<void> _save() async {
-    final prefs = await _prefs;
-    await prefs.setInt('setting_min_duration', _minDuration);
-    await prefs.setString('setting_rid', _rid);
-    await prefs.setBool('setting_history', _history);
-    await prefs.setBool('setting_watch_later', _watchLater);
-    await prefs.setBool('setting_rcmd_enabled', _rcmdEnabled);
-    await prefs.setInt('setting_rcmd_batch', _rcmdBatch);
-    await prefs.setStringList('setting_rcmd_rids', _rcmdRids.toList());
+    final s = widget.repo.settings;
+    await s.setMinDuration(_minDuration);
+    await s.setRid(_rid);
+    await s.setHistoryEnabled(_history);
+    await s.setWatchLaterEnabled(_watchLater);
+    await s.setRcmdEnabled(_rcmdEnabled);
+    await s.setRcmdBatch(_rcmdBatch);
+    await s.setRcmdRids(_rcmdRids.toList());
     await widget.repo.setGuestMode(_guestMode);
   }
 

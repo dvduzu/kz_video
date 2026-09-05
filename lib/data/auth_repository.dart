@@ -80,6 +80,15 @@ class AuthRepository {
     }
   }
 
+  Stream<bool> webQrLoginFlow(String key) async* {
+    for (var i = 0; i < 90; i++) {
+      await Future<void>.delayed(const Duration(seconds: 2));
+      final ok = await webQrPoll(key);
+      yield ok;
+      if (ok) return;
+    }
+  }
+
   Future<bool> loginWithCookie(String cookieHeader) async {
     await client.device.ensureBuvid();
     final parsed = _parseCookie(cookieHeader);

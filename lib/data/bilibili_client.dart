@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import '../core/logger.dart';
 import 'api_exception.dart';
+import 'bilibili_constants.dart';
 import 'bilibili_auth.dart';
 import 'bilibili_device.dart';
 import 'wbi_service.dart';
@@ -20,7 +21,7 @@ class BilibiliClient {
     final dio = Dio(BaseOptions(
       baseUrl: 'https://api.bilibili.com',
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+        'User-Agent': BiliConstants.webUserAgent,
         'Referer': 'https://www.bilibili.com/',
         'env': 'prod',
         'app-key': 'android64',

@@ -36,6 +36,13 @@ class LocalStore {
   bool get guestMode => _p.getBool('guest_mode') ?? false;
 
   Future<void> setGuestMode(bool v) => _p.setBool('guest_mode', v);
+  Future<void> setHistoryEnabled(bool v) => _p.setBool('setting_history', v);
+  Future<void> setWatchLaterEnabled(bool v) => _p.setBool('setting_watch_later', v);
+  Future<void> setMinDuration(int v) => _p.setInt('setting_min_duration', v);
+  Future<void> setRid(String v) => _p.setString('setting_rid', v);
+  Future<void> setRcmdEnabled(bool v) => _p.setBool('setting_rcmd_enabled', v);
+  Future<void> setRcmdBatch(int v) => _p.setInt('setting_rcmd_batch', v);
+  Future<void> setRcmdRids(List<String> v) => _p.setStringList('setting_rcmd_rids', v);
 
   List<Map<String, dynamic>> _readList(String key) {
     final raw = _p.getStringList(key) ?? [];

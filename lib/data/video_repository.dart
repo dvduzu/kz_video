@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:dio/dio.dart';
 import 'auth_repository.dart';
 import 'bilibili_client.dart';
@@ -6,6 +7,9 @@ import 'local_store.dart';
 import 'models.dart';
 import 'video_api.dart';
 
+// 本文件是 Facade，只做委托和最基础的本地 CRUD。
+// 新的业务规则（判断逻辑、多步骤编排）请写进对应的 XxxRepository/XxxService，
+// 这里只允许出现 "调用某个 service 的方法" 这种单行委托。
 class VideoRepository {
   static VideoRepository? _instance;
   static VideoRepository instance() => _instance!;
@@ -17,6 +21,7 @@ class VideoRepository {
   String get loginName => client.auth.loginName;
   int get loginAt => client.auth.loginAt;
   int get sessExpires => client.auth.sessExpires;
+  LocalStore get settings => store;
   Future<void> setGuestMode(bool enabled) async {
     await client.auth.setGuestMode(enabled);
     await store.setGuestMode(enabled);
@@ -41,6 +46,7 @@ class VideoRepository {
 
   Future<({String key, String url})?> webQrGenerate() => auth.webQrGenerate();
   Future<bool> webQrPoll(String key) => auth.webQrPoll(key);
+  Stream<bool> webQrLoginFlow(String key) => auth.webQrLoginFlow(key);
   Future<bool> loginWithCookie(String cookieHeader) => auth.loginWithCookie(cookieHeader);
   Future<void> restoreLogin() => auth.restoreLogin();
   Future<void> logout() => auth.logout();

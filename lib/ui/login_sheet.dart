@@ -97,19 +97,12 @@ void showQrLoginDialog(BuildContext context, VideoRepository repo) {
     }
     qrUrl.value = gen.url;
     status.value = '请用 B 站 App 扫码';
-    var tries = 0;
-    while (tries < 90) {
-      await Future<void>.delayed(const Duration(seconds: 2));
-      if (context.mounted) {
-        final ok = await repo.webQrPoll(gen.key);
-        if (ok) {
-          status.value = '登录成功';
-          await Future<void>.delayed(const Duration(milliseconds: 500));
-          if (context.mounted) Navigator.pop(context);
-          return;
-        }
-        tries++;
-      } else {
+    await for (final ok in repo.webQrLoginFlow(gen.key)) {
+      if (!context.mounted) return;
+      if (ok) {
+        status.value = '登录成功';
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+        if (context.mounted) Navigator.pop(context);
         return;
       }
     }
