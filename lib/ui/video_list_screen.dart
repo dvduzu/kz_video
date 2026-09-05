@@ -27,6 +27,7 @@ class VideoListScreenState extends State<VideoListScreen> {
   bool editing = false;
   int _titleTaps = 0;
   final Set<String> _watched = {};
+  final Set<String> _fading = {};
   final Set<String> selected = {};
 
   void markWatched(VideoInfo v) => _markWatched(v);
@@ -40,8 +41,15 @@ class VideoListScreenState extends State<VideoListScreen> {
   void _markWatched(VideoInfo v) {
     widget.repo.markWatched(v.bvid);
     setState(() {
-      videos?.removeWhere((x) => x.bvid == v.bvid);
+      _fading.add(v.bvid);
       _watched.add(v.bvid);
+    });
+    Future<void>.delayed(const Duration(milliseconds: 400), () {
+      if (!mounted) return;
+      setState(() {
+        videos?.removeWhere((x) => x.bvid == v.bvid);
+        _fading.remove(v.bvid);
+      });
     });
   }
 
@@ -77,6 +85,7 @@ class VideoListScreenState extends State<VideoListScreen> {
     await widget.repo.recordRefresh();
     await widget.repo.clearWatched();
     _watched.clear();
+    _fading.clear();
     await _load(force: true);
   }
 
@@ -207,7 +216,14 @@ class VideoListScreenState extends State<VideoListScreen> {
           itemBuilder: (context, i) {
             final v = list[i];
             final isSelected = selected.contains(v.bvid);
-            return Card(
+            final isFading = _fading.contains(v.bvid);
+            return AnimatedSize(
+              duration: const Duration(milliseconds: 400),
+              curve: Curves.easeInOut,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 400),
+                opacity: isFading ? 0 : 1,
+                child: Card(
               key: ValueKey('${v.bvid}_${Theme.of(context).brightness}'),
               clipBehavior: Clip.antiAlias,
               elevation: 0,
@@ -249,6 +265,8 @@ class VideoListScreenState extends State<VideoListScreen> {
                   ),
                 ),
               ),
+            ),
+            ),
             );
           },
           ),

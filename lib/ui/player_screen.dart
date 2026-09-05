@@ -61,7 +61,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     player.stream.position.listen((_) { if (mounted) setState(() {}); });
     player.stream.duration.listen((_) { if (mounted) setState(() {}); });
     player.stream.completed.listen((_) {
-      widget.onWatched(widget.video);
+      final pos = player.state.position.inMilliseconds;
+      final dur = player.state.duration.inMilliseconds;
+      if (dur > 0 && pos >= dur * 0.95) {
+        widget.onWatched(widget.video);
+      }
     });
     player.stream.error.listen((e) { _onPlaybackError(e); });
   }
