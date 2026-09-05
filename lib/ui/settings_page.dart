@@ -21,6 +21,11 @@ class _SettingsPageState extends State<SettingsPage> {
   late bool _rcmdEnabled;
   late int _rcmdBatch;
   late bool _guestMode;
+  late int _oldMinDuration;
+  late String _oldRid;
+  late bool _oldRcmdEnabled;
+  late int _oldRcmdBatch;
+  late bool _oldGuestMode;
 
   static const _durs = {600: '10 分钟', 1200: '20 分钟', 1800: '30 分钟'};
   static const _rids = {'': '全部', 'tech': '科技', 'edu': '知识', 'life': '美食', 'game': '游戏', 'ent': '娱乐', 'music': '音乐', 'sub': '订阅'};
@@ -41,11 +46,21 @@ class _SettingsPageState extends State<SettingsPage> {
       _rcmdEnabled = s.rcmdEnabled;
       _rcmdBatch = s.rcmdBatch;
       _guestMode = s.guestMode;
+      _oldMinDuration = s.minDuration;
+      _oldRid = s.rid;
+      _oldRcmdEnabled = s.rcmdEnabled;
+      _oldRcmdBatch = s.rcmdBatch;
+      _oldGuestMode = s.guestMode;
     });
   }
 
-  Future<void> _save() async {
+  Future<bool> _save() async {
     final s = widget.repo.settings;
+    final changed = _rid != _oldRid ||
+        _rcmdEnabled != _oldRcmdEnabled ||
+        _rcmdBatch != _oldRcmdBatch ||
+        _minDuration != _oldMinDuration ||
+        _guestMode != _oldGuestMode;
     await s.setMinDuration(_minDuration);
     await s.setRid(_rid);
     await s.setHistoryEnabled(_history);
@@ -53,6 +68,7 @@ class _SettingsPageState extends State<SettingsPage> {
     await s.setRcmdEnabled(_rcmdEnabled);
     await s.setRcmdBatch(_rcmdBatch);
     await widget.repo.setGuestMode(_guestMode);
+    return changed;
   }
 
   @override
@@ -166,8 +182,8 @@ class _SettingsPageState extends State<SettingsPage> {
           padding: const EdgeInsets.all(12),
           child: FilledButton(
             onPressed: () async {
-              await _save();
-              if (mounted) Navigator.pop(context, true);
+              final changed = await _save();
+              if (mounted) Navigator.pop(context, changed);
             },
             child: const Text('保存'),
           ),

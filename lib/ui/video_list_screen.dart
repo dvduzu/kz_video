@@ -417,7 +417,9 @@ class VideoListScreenState extends State<VideoListScreen> {
   }
 
   Future<void> _showSettings() async {
-    await Navigator.push<bool>(context, MaterialPageRoute(
+    final oldHasAccount = widget.repo.hasAccount;
+    final oldGuestMode = widget.repo.guestMode;
+    final changed = await Navigator.push<bool>(context, MaterialPageRoute(
       builder: (_) => SettingsPage(
         repo: widget.repo,
         onOpenColorSettings: _showColorSettings,
@@ -425,6 +427,13 @@ class VideoListScreenState extends State<VideoListScreen> {
         onOpenBlacklist: _showBlacklist,
       ),
     ));
-    if (mounted) await _load(force: true);
+    if (!mounted) return;
+    final accountChanged = widget.repo.hasAccount != oldHasAccount || widget.repo.guestMode != oldGuestMode;
+    if (changed != null) {
+      setState(() {});
+    }
+    if (changed == true || accountChanged) {
+      await _load(force: true);
+    }
   }
 }
