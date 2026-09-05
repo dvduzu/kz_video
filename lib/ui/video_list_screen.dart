@@ -425,6 +425,6 @@ class VideoListScreenState extends State<VideoListScreen> {
         onOpenBlacklist: _showBlacklist,
       ),
     ));
-    if (mounted) setState(() {});
+    if (mounted) await _load(force: true);
   }
 }
