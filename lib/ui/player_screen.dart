@@ -233,7 +233,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final position = player.state.position;
     final duration = player.state.duration;
     final playing = player.state.playing;
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) widget.onBack();
+      },
+      child: Scaffold(
       backgroundColor: Colors.black,
       body: GestureDetector(
         onTap: _toggleControls,
@@ -430,7 +435,8 @@ IconButton(
             ]),
               ),
             ),
-        ]),
+]),
+      ),
       ),
     );
   }
