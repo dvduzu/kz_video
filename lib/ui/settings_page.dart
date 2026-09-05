@@ -16,6 +16,7 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   late int _minDuration;
   late String _rid;
+  late String _homeRid;
   late bool _history;
   late bool _watchLater;
   late bool _rcmdEnabled;
@@ -23,6 +24,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late bool _guestMode;
   late int _oldMinDuration;
   late String _oldRid;
+  late String _oldHomeRid;
   late bool _oldRcmdEnabled;
   late int _oldRcmdBatch;
   late bool _oldGuestMode;
@@ -41,6 +43,7 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() {
       _minDuration = s.minDuration;
       _rid = s.rid;
+      _homeRid = s.homeRid;
       _history = s.isHistoryEnabled;
       _watchLater = s.isWatchLaterEnabled;
       _rcmdEnabled = s.rcmdEnabled;
@@ -48,6 +51,7 @@ class _SettingsPageState extends State<SettingsPage> {
       _guestMode = s.guestMode;
       _oldMinDuration = s.minDuration;
       _oldRid = s.rid;
+      _oldHomeRid = s.homeRid;
       _oldRcmdEnabled = s.rcmdEnabled;
       _oldRcmdBatch = s.rcmdBatch;
       _oldGuestMode = s.guestMode;
@@ -57,12 +61,14 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<bool> _save() async {
     final s = widget.repo.settings;
     final changed = _rid != _oldRid ||
+        _homeRid != _oldHomeRid ||
         _rcmdEnabled != _oldRcmdEnabled ||
         _rcmdBatch != _oldRcmdBatch ||
         _minDuration != _oldMinDuration ||
         _guestMode != _oldGuestMode;
     await s.setMinDuration(_minDuration);
     await s.setRid(_rid);
+    await s.setHomeRid(_homeRid);
     await s.setHistoryEnabled(_history);
     await s.setWatchLaterEnabled(_watchLater);
     await s.setRcmdEnabled(_rcmdEnabled);
@@ -88,6 +94,17 @@ class _SettingsPageState extends State<SettingsPage> {
             label: Text(e.value),
             selected: _rid == e.key,
             onSelected: (_) => setState(() => _rid = e.key),
+          )).toList()),
+          const SizedBox(height: 16),
+          const Text('主页分区', style: TextStyle(fontWeight: FontWeight.bold)),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 2),
+            child: Text('启动时默认进入的分区', style: TextStyle(fontSize: 12, color: Colors.grey)),
+          ),
+          Wrap(spacing: 8, children: _rids.entries.map((e) => ChoiceChip(
+            label: Text(e.value),
+            selected: _homeRid == e.key,
+            onSelected: (_) => setState(() => _homeRid = e.key),
           )).toList()),
           const SizedBox(height: 16),
           const Text('长视频阈值', style: TextStyle(fontWeight: FontWeight.bold)),

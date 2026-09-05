@@ -30,6 +30,7 @@ class LocalStore {
   bool get isWatchLaterEnabled => _p.getBool('setting_watch_later') ?? true;
   int get minDuration => _p.getInt('setting_min_duration') ?? 600;
   String get rid => _p.getString('setting_rid') ?? '';
+  String get homeRid => _p.getString('setting_home_rid') ?? '';
   bool get rcmdEnabled => _p.getBool('setting_rcmd_enabled') ?? false;
   int get rcmdBatch => _p.getInt('setting_rcmd_batch') ?? 3;
   bool get guestMode => _p.getBool('guest_mode') ?? false;
@@ -39,6 +40,7 @@ class LocalStore {
   Future<void> setWatchLaterEnabled(bool v) => _p.setBool('setting_watch_later', v);
   Future<void> setMinDuration(int v) => _p.setInt('setting_min_duration', v);
   Future<void> setRid(String v) => _p.setString('setting_rid', v);
+  Future<void> setHomeRid(String v) => _p.setString('setting_home_rid', v);
   Future<void> setRcmdEnabled(bool v) => _p.setBool('setting_rcmd_enabled', v);
   Future<void> setRcmdBatch(int v) => _p.setInt('setting_rcmd_batch', v);
 

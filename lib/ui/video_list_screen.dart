@@ -33,6 +33,10 @@ class VideoListScreenState extends State<VideoListScreen> {
   @override
   void initState() {
     super.initState();
+    final homeRid = widget.repo.settings.homeRid;
+    if (homeRid != widget.repo.settings.rid) {
+      widget.repo.settings.setRid(homeRid);
+    }
     _load();
   }
 
