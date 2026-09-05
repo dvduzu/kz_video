@@ -37,6 +37,7 @@ class VideoListScreenState extends State<VideoListScreen> {
   }
 
   void _markWatched(VideoInfo v) {
+    widget.repo.markWatched(v.bvid);
     setState(() {
       videos?.removeWhere((x) => x.bvid == v.bvid);
       _watched.add(v.bvid);
@@ -73,6 +74,7 @@ class VideoListScreenState extends State<VideoListScreen> {
       return;
     }
     await widget.repo.recordRefresh();
+    await widget.repo.clearWatched();
     _watched.clear();
     await _load(force: true);
   }
