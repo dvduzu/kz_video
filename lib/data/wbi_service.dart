@@ -3,9 +3,8 @@ import 'wbi_sign.dart';
 
 class WbiService {
   final Dio dio;
-  final Future<void> Function() onEnsureDevice;
 
-  WbiService(this.dio, {required this.onEnsureDevice});
+  WbiService(this.dio);
 
   String? _mixinKey;
   int _mixinFetchedAt = 0;
@@ -13,7 +12,6 @@ class WbiService {
   Future<String> getMixinKey() async {
     final now = DateTime.now().millisecondsSinceEpoch;
     if (_mixinKey == null || now - _mixinFetchedAt > 12 * 3600 * 1000) {
-      await onEnsureDevice();
       final resp = await dio.get('/x/web-interface/nav');
       final wbiImg = resp.data['data']?['wbi_img'];
       final imgUrl = wbiImg?['img_url'] as String? ?? '';

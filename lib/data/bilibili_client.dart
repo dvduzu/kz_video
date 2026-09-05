@@ -12,7 +12,7 @@ class BilibiliClient {
 
   BilibiliClient(this.dio) : auth = BilibiliAuth() {
     device = BilibiliDevice(dio, auth);
-    wbi = WbiService(dio, onEnsureDevice: () => device.ensureBuvid());
+    wbi = WbiService(dio);
   }
 
   static Dio createDio() {
