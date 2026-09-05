@@ -111,6 +111,12 @@ class VideoRepository {
     }).whereType<VideoInfo>().toList();
   }
 
+  Future<void> removeHistory(String bvid) async {
+    final list = store.history;
+    list.removeWhere((e) => e['bvid'] == bvid);
+    await store.setHistory(list);
+  }
+
   Future<void> addWatchLater(VideoInfo v) async {
     if (!await isWatchLaterEnabled()) return;
     final list = store.watchLater;

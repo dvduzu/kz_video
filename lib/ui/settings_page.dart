@@ -156,6 +156,12 @@ class _SettingsPageState extends State<SettingsPage> {
             subtitle: const Text('关注 UP 主，推荐会包含他们的新视频'),
             onTap: widget.onOpenSubscriptions,
           ),
+          ListTile(
+            leading: const Icon(Icons.block),
+            title: const Text('管理黑名单'),
+            subtitle: const Text('查看/移除已跳过的视频'),
+            onTap: widget.onOpenBlacklist,
+          ),
           SwitchListTile(
             title: const Text('历史记录'),
             subtitle: const Text('记住看过的视频'),
@@ -167,12 +173,6 @@ class _SettingsPageState extends State<SettingsPage> {
             subtitle: const Text('收藏到稍后队列'),
             value: _watchLater,
             onChanged: (v) => setState(() => _watchLater = v),
-          ),
-          ListTile(
-            leading: const Icon(Icons.block),
-            title: const Text('管理黑名单'),
-            subtitle: const Text('查看/移除已跳过的视频'),
-            onTap: widget.onOpenBlacklist,
           ),
           const SizedBox(height: 16),
         ],

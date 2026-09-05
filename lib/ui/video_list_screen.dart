@@ -125,6 +125,14 @@ class VideoListScreenState extends State<VideoListScreen> {
         actions: editing
             ? [
                 TextButton.icon(
+                  onPressed: () => setState(() {
+                    selected.clear();
+                    selected.addAll((videos ?? const []).map((e) => e.bvid));
+                  }),
+                  icon: const Icon(Icons.select_all),
+                  label: const Text('全选'),
+                ),
+                TextButton.icon(
                   onPressed: selected.isEmpty ? null : _markSelectedWatched,
                   icon: const Icon(Icons.done_all),
                   label: const Text('标记看完'),
@@ -136,10 +144,11 @@ class VideoListScreenState extends State<VideoListScreen> {
                 ),
               ]
             : [
-                if (widget.repo.unlimitedRefresh)
-                  IconButton(icon: const Icon(Icons.done_all), tooltip: '一键看完(Debug)', onPressed: () => setState(() => editing = true)),
-                IconButton(icon: const Icon(Icons.history), tooltip: '历史', onPressed: _showHistory),
-                IconButton(icon: const Icon(Icons.bookmarks_outlined), tooltip: '收藏', onPressed: _showWatchLater),
+                IconButton(icon: const Icon(Icons.done_all), tooltip: '标记看完', onPressed: () => setState(() => editing = true)),
+                if (widget.repo.settings.isHistoryEnabled)
+                  IconButton(icon: const Icon(Icons.history), tooltip: '历史', onPressed: _showHistory),
+                if (widget.repo.settings.isWatchLaterEnabled)
+                  IconButton(icon: const Icon(Icons.bookmarks_outlined), tooltip: '收藏', onPressed: _showWatchLater),
                 IconButton(icon: const Icon(Icons.settings_outlined), tooltip: '设置', onPressed: _showSettings),
               ],
       ),
@@ -273,11 +282,17 @@ class VideoListScreenState extends State<VideoListScreen> {
             final v = items[i];
             return ListTile(
               title: Text(v.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-              trailing: title == '收藏' ? IconButton(icon: const Icon(Icons.close), onPressed: () async {
-                await widget.repo.removeWatchLater(v.bvid);
-                if (ctx.mounted) Navigator.pop(ctx);
-                _showWatchLater();
-              }) : null,
+              trailing: title == '收藏'
+                ? IconButton(icon: const Icon(Icons.close), onPressed: () async {
+                    await widget.repo.removeWatchLater(v.bvid);
+                    if (ctx.mounted) Navigator.pop(ctx);
+                    _showWatchLater();
+                  })
+                : IconButton(icon: const Icon(Icons.delete_outline), onPressed: () async {
+                    await widget.repo.removeHistory(v.bvid);
+                    if (ctx.mounted) Navigator.pop(ctx);
+                    _showHistory();
+                  }),
               onTap: () { Navigator.pop(ctx); widget.onPlay(v); },
             );
           },
@@ -341,6 +356,11 @@ class VideoListScreenState extends State<VideoListScreen> {
               title: Text(v.title, maxLines: 1, overflow: TextOverflow.ellipsis),
               trailing: IconButton(icon: const Icon(Icons.undo), tooltip: '移出黑名单', onPressed: () async {
                 await widget.repo.removeBlacklist(v.bvid);
+                setState(() {
+                  if (!(videos ?? const []).any((x) => x.bvid == v.bvid)) {
+                    videos?.insert(0, v);
+                  }
+                });
                 if (ctx.mounted) Navigator.pop(ctx);
                 _showBlacklist();
               }),
@@ -360,5 +380,6 @@ class VideoListScreenState extends State<VideoListScreen> {
         onOpenBlacklist: _showBlacklist,
       ),
     ));
+    if (mounted) setState(() {});
   }
 }
