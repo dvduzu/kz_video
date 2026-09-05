@@ -15,14 +15,14 @@ class VideoRepository {
   static VideoRepository instance() => _instance!;
   static void init(VideoRepository repo) => _instance = repo;
 
-  bool get isLoggedIn => client.isLoggedIn;
-  bool get hasAccount => client.hasAccount;
-  bool get guestMode => client.guestMode;
-  String get loginName => client.loginName;
-  int get loginAt => client.loginAt;
-  int get sessExpires => client.sessExpires;
+  bool get isLoggedIn => client.auth.isLoggedIn;
+  bool get hasAccount => client.auth.hasAccount;
+  bool get guestMode => client.auth.guestMode;
+  String get loginName => client.auth.loginName;
+  int get loginAt => client.auth.loginAt;
+  int get sessExpires => client.auth.sessExpires;
   Future<void> setGuestMode(bool enabled) async {
-    await client.setGuestMode(enabled);
+    await client.auth.setGuestMode(enabled);
     await store.setGuestMode(enabled);
   }
 
@@ -110,29 +110,29 @@ class VideoRepository {
     if (!parsed.containsKey('SESSDATA') || parsed['SESSDATA']!.isEmpty) {
       return false;
     }
-    final before = Map<String, String>.from(client.fullCookies ?? {});
-    final merged = Map<String, String>.from(client.fullCookies ?? {});
+    final before = Map<String, String>.from(client.auth.fullCookies ?? {});
+    final merged = Map<String, String>.from(client.auth.fullCookies ?? {});
     merged.addAll(parsed);
-    client.setFullCookies(merged);
+    client.auth.setFullCookies(merged);
     final ok = await _validateLogin();
     if (ok) {
       final loginAt = DateTime.now().millisecondsSinceEpoch;
       final sess = parsed['SESSDATA'] ?? '';
-      client.setLoginTimestamps(loginAt, _parseSessExpires(sess));
+      client.auth.setLoginTimestamps(loginAt, _parseSessExpires(sess));
       const storage = FlutterSecureStorage();
       await storage.write(key: 'login_cookie', value: cookieHeader);
     } else {
-      client.setFullCookies(before);
+      client.auth.setFullCookies(before);
     }
     return ok;
   }
 
   Future<bool> _validateLogin() async {
     try {
-      final hasSessdata = client.fullCookies?.containsKey('SESSDATA') == true;
+      final hasSessdata = client.auth.fullCookies?.containsKey('SESSDATA') == true;
       // ignore: avoid_print
-      print('[kzv] validate: hasSESSDATA=$hasSessdata keys=${client.fullCookies?.keys.join(',')}');
-      final cookieHeader = client.fullCookies?.entries.map((e) => '${e.key}=${e.value}').join('; ');
+      print('[kzv] validate: hasSESSDATA=$hasSessdata keys=${client.auth.fullCookies?.keys.join(',')}');
+      final cookieHeader = client.auth.fullCookies?.entries.map((e) => '${e.key}=${e.value}').join('; ');
       final resp = await dio.get('https://api.bilibili.com/x/web-interface/nav', options: Options(headers: {
         if (cookieHeader != null) 'Cookie': cookieHeader,
       }));
@@ -140,7 +140,7 @@ class VideoRepository {
       // ignore: avoid_print
       print('[kzv] nav code=${data['code']} isLogin=${data['data']?['isLogin']} uname=${data['data']?['uname']}');
       final isLogin = data['data']?['isLogin'] == true;
-      client.setLoginState(isLogin, isLogin ? ((data['data']?['uname'] as String?) ?? '') : '');
+      client.auth.setLoginState(isLogin, isLogin ? ((data['data']?['uname'] as String?) ?? '') : '');
       return isLogin;
     } catch (e) {
       // ignore: avoid_print
@@ -155,15 +155,15 @@ class VideoRepository {
     if (saved != null && saved.isNotEmpty) {
       await loginWithCookie(saved);
     }
-    await client.setGuestMode(store.guestMode);
+    await client.auth.setGuestMode(store.guestMode);
   }
 
   Future<void> logout() async {
     const storage = FlutterSecureStorage();
     await storage.delete(key: 'login_cookie');
-    client.setLoginState(false, '');
-    client.setLoginTimestamps(0, 0);
-    client.removeLoginCookies();
+    client.auth.setLoginState(false, '');
+    client.auth.setLoginTimestamps(0, 0);
+    client.auth.removeLoginCookies();
   }
 
   Future<Map<String, dynamic>> _wbiGet(String path, Map<String, dynamic> params) async {
@@ -175,7 +175,7 @@ class VideoRepository {
       await client.ensureBuvid();
       final all = <VideoInfo>[];
       for (var b = 0; b < batch && all.length < 60; b++) {
-        final resp = await dio.get('/x/web-interface/index/top/rcmd', queryParameters: {'fresh_type': 3, 'fresh_idx': b}, options: Options(headers: client.requestHeaders()));
+        final resp = await dio.get('/x/web-interface/index/top/rcmd', queryParameters: {'fresh_type': 3, 'fresh_idx': b}, options: Options(headers: client.auth.requestHeaders()));
         final body = resp.data as Map<String, dynamic>;
         final code = body['code'];
         if (code is int && code != 0) {
@@ -372,7 +372,7 @@ class VideoRepository {
     };
   }
 
-  String? get buvid3 => client.buvid3;
+  String? get buvid3 => client.auth.buvid3;
 
   Future<void> addBlacklist(VideoInfo v) async {
     final list = store.blacklist;
@@ -491,7 +491,7 @@ class VideoRepository {
       final enc = Uri.encodeComponent(keyword);
       final resp = await dio.get('/x/web-interface/wbi/search/type',
         queryParameters: params,
-        options: Options(headers: client.requestHeaders(extra: {
+        options: Options(headers: client.auth.requestHeaders(extra: {
           'origin': 'https://search.bilibili.com',
           'referer': 'https://search.bilibili.com/bili_user?keyword=$enc',
         })));

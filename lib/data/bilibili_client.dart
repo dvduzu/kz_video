@@ -3,12 +3,14 @@ import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'api_exception.dart';
+import 'bilibili_auth.dart';
 import 'wbi_sign.dart';
 
 class BilibiliClient {
   final Dio dio;
+  final BilibiliAuth auth;
 
-  BilibiliClient(this.dio);
+  BilibiliClient(this.dio) : auth = BilibiliAuth();
 
   static Dio createDio() {
     final dio = Dio(BaseOptions(
@@ -34,45 +36,6 @@ class BilibiliClient {
   bool _buvidActivated = false;
   bool _biliTicketOk = false;
   int _biliTicketExpires = 0;
-  Map<String, String>? _fullCookies;
-
-  bool _loggedIn = false;
-  bool _guestMode = false;
-  String _loginName = '';
-  int _loginAt = 0;
-  int _sessExpires = 0;
-
-  bool get isLoggedIn => _loggedIn && !_guestMode;
-  bool get hasAccount => _loggedIn;
-  bool get guestMode => _guestMode;
-  String get loginName => _loginName;
-  int get loginAt => _loginAt;
-  int get sessExpires => _sessExpires;
-  String? get buvid3 => _fullCookies?['buvid3'];
-
-  Future<void> setGuestMode(bool enabled) async {
-    _guestMode = enabled;
-  }
-
-  void setFullCookies(Map<String, String> cookies) => _fullCookies = cookies;
-  Map<String, String>? get fullCookies => _fullCookies;
-
-  void setLoginState(bool loggedIn, String name) {
-    _loggedIn = loggedIn;
-    _loginName = name;
-  }
-
-  void setLoginTimestamps(int loginAt, int sessExpires) {
-    _loginAt = loginAt;
-    _sessExpires = sessExpires;
-  }
-
-  void removeLoginCookies() {
-    _fullCookies?.remove('SESSDATA');
-    _fullCookies?.remove('bili_jct');
-    _fullCookies?.remove('DedeUserID');
-    _fullCookies?.remove('DedeUserID__ckMd5');
-  }
 
   Future<String> getMixinKey() async {
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -117,9 +80,10 @@ class BilibiliClient {
     if (_buvidReady && _biliTicketOk && now < _biliTicketExpires) return;
     _buvidReady = false;
     final savedLogin = <String, String>{};
-    if (_fullCookies != null) {
+    final full = auth.fullCookies;
+    if (full != null) {
       for (final k in ['SESSDATA', 'bili_jct', 'DedeUserID', 'DedeUserID__ckMd5']) {
-        final v = _fullCookies![k];
+        final v = full[k];
         if (v != null) savedLogin[k] = v;
       }
     }
@@ -157,7 +121,7 @@ class BilibiliClient {
         print('[kzv] bili_ticket failed: $e');
       }
       cookies.addAll(savedLogin);
-      _fullCookies = cookies;
+      auth.setFullCookies(cookies);
       _buvidReady = true;
       if (!_buvidActivated) {
         _buvidActivated = true;
@@ -169,24 +133,6 @@ class BilibiliClient {
       // ignore: avoid_print
       print('[kzv] ensureBuvid failed: $e');
     }
-  }
-
-  String _genAuroraEid(int uid) {
-    final midByte = utf8.encode(uid.toString());
-    const key = 'ad1va46a7lza';
-    for (var i = 0; i < midByte.length; i++) {
-      midByte[i] ^= key.codeUnitAt(i % key.length);
-    }
-    return base64.encode(midByte).replaceAll('=', '');
-  }
-
-  Map<String, String> _loginHeaders() {
-    final midStr = _fullCookies?['DedeUserID'] ?? '';
-    final mid = int.tryParse(midStr) ?? 0;
-    return {
-      if (mid > 0) 'x-bili-mid': midStr,
-      if (mid > 0) 'x-bili-aurora-eid': _genAuroraEid(mid),
-    };
   }
 
   Future<void> _activateBuvid() async {
@@ -202,9 +148,7 @@ class BilibiliClient {
       await dio.post(
         '/x/internal/gaia-gateway/ExClimbWuzhi',
         data: {'payload': jsonData},
-        options: Options(headers: {
-          ..._loginHeaders(),
-        }),
+        options: Options(headers: auth.fullLoginHeaders()),
       );
       // ignore: avoid_print
       print('[kzv] buvid activated');
@@ -214,28 +158,12 @@ class BilibiliClient {
     }
   }
 
-  Map<String, String> _effectiveCookies() {
-    final all = _fullCookies ?? const <String, String>{};
-    if (!_guestMode) return all;
-    return Map.fromEntries(all.entries.where((e) => !const {'SESSDATA', 'bili_jct', 'DedeUserID', 'DedeUserID__ckMd5', 'sid'}.contains(e.key)));
-  }
-
-  Map<String, String> requestHeaders({Map<String, String> extra = const {}}) {
-    final cookies = _effectiveCookies();
-    final headers = <String, String>{
-      ..._loginHeaders(),
-      ...extra,
-    };
-    if (cookies.isNotEmpty) headers['Cookie'] = cookies.entries.map((e) => '${e.key}=${e.value}').join('; ');
-    return headers;
-  }
-
   Future<Map<String, dynamic>> wbiGet(String path, Map<String, dynamic> params) async {
     await ensureBuvid();
     final mixinKey = await getMixinKey();
     final signed = Map<String, dynamic>.from(params);
     WbiSign.sign(signed, mixinKey);
-    final resp = await dio.get(path, queryParameters: signed, options: Options(headers: requestHeaders()));
+    final resp = await dio.get(path, queryParameters: signed, options: Options(headers: auth.requestHeaders()));
     final body = resp.data as Map<String, dynamic>;
     final code = body['code'];
     if (code is int && code != 0) {
