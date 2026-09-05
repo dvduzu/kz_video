@@ -4,6 +4,7 @@ import '../data/models.dart';
 import '../data/video_repository.dart';
 import 'settings_page.dart';
 import 'subscription_sheet.dart';
+import '../core/logger.dart';
 
 class VideoListScreen extends StatefulWidget {
   final void Function(VideoInfo) onPlay;
@@ -45,8 +46,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
       final list = await VideoRepository.instance().getDailyVideos(force: force);
       setState(() { videos = list; loading = false; });
     } catch (e) {
-      // ignore: avoid_print
-      print('[kzv] load error: $e');
+      KzvLogger.debug('load error: $e');
       setState(() { error = e.toString(); loading = false; });
       if (!force) {
         await Future<void>.delayed(const Duration(seconds: 2));

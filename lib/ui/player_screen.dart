@@ -5,6 +5,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import '../data/models.dart';
 import '../data/video_repository.dart';
+import '../core/logger.dart';
 
 class PlayerScreen extends StatefulWidget {
   final VideoInfo video;
@@ -70,8 +71,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _retryCount++;
     // 视频轨中断/格式错误：尝试降一个清晰度重载
     final q = (currentQn ?? 80) == 80 ? 64 : 32;
-    // ignore: avoid_print
-    print('[kzv] playback error, retry qn=$q: $e');
+    KzvLogger.debug('playback error, retry qn=$q: $e');
     await _load(qn: q);
   }
 
@@ -116,8 +116,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _loadSubtitle() async {
     final cues = await VideoRepository.instance().getSubtitles(widget.video.bvid);
     if (!mounted || cues == null || cues.isEmpty) return;
-    // ignore: avoid_print
-    print('[kzv] subtitle loaded cues=${cues.length}');
+    KzvLogger.debug('subtitle loaded cues=${cues.length}');
     setState(() { _subtitleCues = cues; });
   }
 

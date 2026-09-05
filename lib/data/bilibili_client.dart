@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import '../core/logger.dart';
 import 'api_exception.dart';
 import 'bilibili_auth.dart';
 import 'bilibili_device.dart';
@@ -39,8 +40,7 @@ class BilibiliClient {
     final body = resp.data as Map<String, dynamic>;
     final code = body['code'];
     if (code is int && code != 0) {
-      // ignore: avoid_print
-      print('[kzv] wbi error $path code=$code msg=${body['message']}');
+      KzvLogger.warning('wbi error $path code=$code msg=${body['message']}');
       throw BilibiliApiException('${body['message'] ?? code}', code: code, path: path);
     }
     return body;

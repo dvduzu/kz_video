@@ -5,6 +5,7 @@ import 'bilibili_client.dart';
 import 'local_store.dart';
 import 'models.dart';
 import 'video_api.dart';
+import '../core/logger.dart';
 
 class FeedService {
   final BilibiliClient client;
@@ -60,8 +61,7 @@ class FeedService {
         final body = resp.data as Map<String, dynamic>;
         final code = body['code'];
         if (code is int && code != 0) {
-          // ignore: avoid_print
-          print('[kzv] rcmd error code=$code msg=${body['message']}');
+          KzvLogger.warning('rcmd error code=$code msg=${body['message']}');
           return all;
         }
         final items = (body['data']?['item'] as List?) ?? [];
@@ -72,12 +72,10 @@ class FeedService {
         }
         if (items.isEmpty) break;
       }
-      // ignore: avoid_print
-      print('[kzv] rcmd total=${all.length}');
+      KzvLogger.debug('rcmd total=${all.length}');
       return all;
     } catch (e) {
-      // ignore: avoid_print
-      print('[kzv] rcmd failed: $e');
+      KzvLogger.debug('rcmd failed: $e');
       return [];
     }
   }
@@ -140,13 +138,11 @@ class FeedService {
         final batch = store.rcmdBatch;
         final rcmdVideos = await _getRcmdVideos(batch: batch);
         final rcmdFiltered = rcmdVideos.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid)).toList();
-        // ignore: avoid_print
-        print('[kzv] rcmd raw=${rcmdVideos.length} filtered=$minDuration→${rcmdFiltered.length}');
+        KzvLogger.debug('rcmd raw=${rcmdVideos.length} filtered=$minDuration→${rcmdFiltered.length}');
         if (rcmdFiltered.isNotEmpty) {
           final picked = rcmdFiltered.take(20).toList()..shuffle(Random());
           final chosen = picked.take(10).toList();
-          // ignore: avoid_print
-          print('[kzv] daily(rcmd) min=$minDuration items=${rcmdFiltered.length} chosen=${chosen.length}');
+          KzvLogger.debug('daily(rcmd) min=$minDuration items=${rcmdFiltered.length} chosen=${chosen.length}');
           if (chosen.isNotEmpty) {
             await store.setDailyCache(key, jsonEncode(chosen.map((e) => e.toJson()).toList()));
             await store.setDailyTs(tsKey, now);
@@ -166,8 +162,7 @@ class FeedService {
         ..sort((a, b) => b.pubdate.compareTo(a.pubdate));
       final picked = subFiltered.take(40).toList()..shuffle(Random());
       final chosen = picked.take(10).toList();
-      // ignore: avoid_print
-      print('[kzv] daily(sub) min=$minDuration sub=${subFiltered.length} chosen=${chosen.length}');
+      KzvLogger.debug('daily(sub) min=$minDuration sub=${subFiltered.length} chosen=${chosen.length}');
       if (chosen.isNotEmpty) {
         await store.setDailyCache(key, jsonEncode(chosen.map((e) => e.toJson()).toList()));
         await store.setDailyTs(tsKey, now);
@@ -178,8 +173,7 @@ class FeedService {
       ..sort((a, b) => b.pubdate.compareTo(a.pubdate));
     final picked = popularFiltered.take(40).toList()..shuffle(Random());
     final chosen = picked.take(10).toList();
-    // ignore: avoid_print
-    print('[kzv] daily min=$minDuration popular=${popularFiltered.length} chosen=${chosen.length}');
+    KzvLogger.debug('daily min=$minDuration popular=${popularFiltered.length} chosen=${chosen.length}');
     if (chosen.isNotEmpty) {
       await store.setDailyCache(key, jsonEncode(chosen.map((e) => e.toJson()).toList()));
       await store.setDailyTs(tsKey, now);

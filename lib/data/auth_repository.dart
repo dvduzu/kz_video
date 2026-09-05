@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'bilibili_client.dart';
 import 'local_store.dart';
+import '../core/logger.dart';
 
 class AuthRepository {
   final BilibiliClient client;
@@ -61,8 +62,7 @@ class AuthRepository {
       final d = data['data'] as Map<String, dynamic>?;
       final code = d?['code'] as int?;
       final values = resp.headers.map['set-cookie'];
-      // ignore: avoid_print
-      print('[kzv] qr poll code=$code setCookie=${values?.length}');
+      KzvLogger.debug('qr poll code=$code setCookie=${values?.length}');
       if (code == 0) {
         final values = resp.headers.map['set-cookie'];
         if (values != null && values.isNotEmpty) {
@@ -104,21 +104,18 @@ class AuthRepository {
   Future<bool> _validateLogin() async {
     try {
       final hasSessdata = client.auth.fullCookies?.containsKey('SESSDATA') == true;
-      // ignore: avoid_print
-      print('[kzv] validate: hasSESSDATA=$hasSessdata keys=${client.auth.fullCookies?.keys.join(',')}');
+      KzvLogger.debug('validate: hasSESSDATA=$hasSessdata');
       final cookieHeader = client.auth.fullCookies?.entries.map((e) => '${e.key}=${e.value}').join('; ');
       final resp = await dio.get('https://api.bilibili.com/x/web-interface/nav', options: Options(headers: {
         if (cookieHeader != null) 'Cookie': cookieHeader,
       }));
       final data = resp.data as Map<String, dynamic>;
-      // ignore: avoid_print
-      print('[kzv] nav code=${data['code']} isLogin=${data['data']?['isLogin']} uname=${data['data']?['uname']}');
+      KzvLogger.debug('nav code=${data['code']} isLogin=${data['data']?['isLogin']} uname=${data['data']?['uname']}');
       final isLogin = data['data']?['isLogin'] == true;
       client.auth.setLoginState(isLogin, isLogin ? ((data['data']?['uname'] as String?) ?? '') : '');
       return isLogin;
     } catch (e) {
-      // ignore: avoid_print
-      print('[kzv] validate error: $e');
+      KzvLogger.debug('validate error: $e');
       return false;
     }
   }

@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'bilibili_auth.dart';
+import '../core/logger.dart';
 
 class BilibiliDevice {
   final Dio dio;
@@ -78,8 +79,7 @@ class BilibiliDevice {
           _biliTicketOk = true;
         }
       } catch (e) {
-        // ignore: avoid_print
-        print('[kzv] bili_ticket failed: $e');
+        KzvLogger.debug('bili_ticket failed: $e');
       }
       cookies.addAll(savedLogin);
       auth.setFullCookies(cookies);
@@ -88,11 +88,9 @@ class BilibiliDevice {
         _buvidActivated = true;
         await _activateBuvid();
       }
-      // ignore: avoid_print
-      print('[kzv] full cookies: ${cookies.keys.join(',')}');
+      KzvLogger.debug('buvid ready (${cookies.length} cookies)');
     } catch (e) {
-      // ignore: avoid_print
-      print('[kzv] ensureBuvid failed: $e');
+      KzvLogger.debug('ensureBuvid failed: $e');
     }
   }
 
@@ -111,11 +109,9 @@ class BilibiliDevice {
         data: {'payload': jsonData},
         options: Options(headers: auth.fullLoginHeaders()),
       );
-      // ignore: avoid_print
-      print('[kzv] buvid activated');
+      KzvLogger.debug('buvid activated');
     } catch (e) {
-      // ignore: avoid_print
-      print('[kzv] buvid activate failed: $e');
+      KzvLogger.debug('buvid activate failed: $e');
     }
   }
 }

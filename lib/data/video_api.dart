@@ -5,6 +5,7 @@ import 'api_exception.dart';
 import 'app_sign.dart';
 import 'bilibili_client.dart';
 import 'models.dart';
+import '../core/logger.dart';
 
 class VideoApi {
   final BilibiliClient client;
@@ -131,8 +132,7 @@ class VideoApi {
         tid: (e['tid'] as int?) ?? 0,
       )).where((v) => v.bvid.isNotEmpty).toList();
     } catch (e) {
-      // ignore: avoid_print
-      print('[kzv] getUpVideosWeb failed: $e');
+      KzvLogger.debug('getUpVideosWeb failed: $e');
       return [];
     }
   }
@@ -162,8 +162,7 @@ class VideoApi {
         );
       }).where((v) => v.bvid.isNotEmpty).toList();
     } catch (e) {
-      // ignore: avoid_print
-      print('[kzv] getUpVideosApp failed: $e');
+      KzvLogger.debug('getUpVideosApp failed: $e');
       return [];
     }
   }
