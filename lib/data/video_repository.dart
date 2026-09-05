@@ -95,7 +95,7 @@ class VideoRepository {
     final list = store.history;
     list.removeWhere((e) => e['bvid'] == v.bvid);
     list.insert(0, v.toJson());
-    if (list.length > 50) list.removeRange(50, list.length);
+    if (list.length > LocalStore.maxHistoryItems) list.removeRange(LocalStore.maxHistoryItems, list.length);
     await store.setHistory(list);
   }
 
@@ -110,7 +110,7 @@ class VideoRepository {
     final list = store.watchLater;
     if (!list.any((e) => e['bvid'] == v.bvid)) {
       list.add(v.toJson());
-      if (list.length > 5) list.removeRange(5, list.length);
+      if (list.length > LocalStore.maxWatchLaterItems) list.removeRange(LocalStore.maxWatchLaterItems, list.length);
       await store.setWatchLater(list);
     }
   }
@@ -130,7 +130,7 @@ class VideoRepository {
   Future<bool> addSubscription(int mid, String name, {String face = ''}) async {
     final list = store.subscriptions;
     if (list.any((e) => e['mid'] == mid)) return true;
-    if (list.length >= 50) return false;
+    if (list.length >= LocalStore.maxSubscriptions) return false;
     list.add({'mid': mid, 'name': name, 'face': face});
     await store.setSubscriptions(list);
     return true;

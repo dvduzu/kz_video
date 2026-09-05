@@ -14,6 +14,10 @@ class FeedService {
   final Dio dio;
 
   static const int cacheValidMs = 6 * 3600 * 1000;
+  static const int dailyChosenCount = 10;
+  static const int rcmdPickLimit = 20;
+  static const int popularPickLimit = 40;
+  static const int rcmdMaxItems = 60;
 
   FeedService(this.client, this.store, this.videoApi) : dio = client.dio;
 
@@ -56,7 +60,7 @@ class FeedService {
     try {
       await client.device.ensureBuvid();
       final all = <VideoInfo>[];
-      for (var b = 0; b < batch && all.length < 60; b++) {
+      for (var b = 0; b < batch && all.length < rcmdMaxItems; b++) {
         final resp = await dio.get('/x/web-interface/index/top/rcmd', queryParameters: {'fresh_type': 3, 'fresh_idx': b}, options: Options(headers: client.auth.requestHeaders()));
         final body = resp.data as Map<String, dynamic>;
         final code = body['code'];
@@ -140,8 +144,8 @@ class FeedService {
         final rcmdFiltered = rcmdVideos.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid)).toList();
         KzvLogger.debug('rcmd raw=${rcmdVideos.length} filtered=$minDuration→${rcmdFiltered.length}');
         if (rcmdFiltered.isNotEmpty) {
-          final picked = rcmdFiltered.take(20).toList()..shuffle(Random());
-          final chosen = picked.take(10).toList();
+          final picked = rcmdFiltered.take(rcmdPickLimit).toList()..shuffle(Random());
+          final chosen = picked.take(dailyChosenCount).toList();
           KzvLogger.debug('daily(rcmd) min=$minDuration items=${rcmdFiltered.length} chosen=${chosen.length}');
           if (chosen.isNotEmpty) {
             await store.setDailyCache(key, jsonEncode(chosen.map((e) => e.toJson()).toList()));
@@ -160,8 +164,8 @@ class FeedService {
     if (ridKey == 'sub') {
       final subFiltered = subVideos.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid)).toList()
         ..sort((a, b) => b.pubdate.compareTo(a.pubdate));
-      final picked = subFiltered.take(40).toList()..shuffle(Random());
-      final chosen = picked.take(10).toList();
+      final picked = subFiltered.take(popularPickLimit).toList()..shuffle(Random());
+      final chosen = picked.take(dailyChosenCount).toList();
       KzvLogger.debug('daily(sub) min=$minDuration sub=${subFiltered.length} chosen=${chosen.length}');
       if (chosen.isNotEmpty) {
         await store.setDailyCache(key, jsonEncode(chosen.map((e) => e.toJson()).toList()));
@@ -171,8 +175,8 @@ class FeedService {
     }
     final popularFiltered = popular.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid)).toList()
       ..sort((a, b) => b.pubdate.compareTo(a.pubdate));
-    final picked = popularFiltered.take(40).toList()..shuffle(Random());
-    final chosen = picked.take(10).toList();
+    final picked = popularFiltered.take(popularPickLimit).toList()..shuffle(Random());
+    final chosen = picked.take(dailyChosenCount).toList();
     KzvLogger.debug('daily min=$minDuration popular=${popularFiltered.length} chosen=${chosen.length}');
     if (chosen.isNotEmpty) {
       await store.setDailyCache(key, jsonEncode(chosen.map((e) => e.toJson()).toList()));

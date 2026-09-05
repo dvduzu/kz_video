@@ -3,7 +3,8 @@ import '../data/models.dart';
 import '../data/video_repository.dart';
 
 class SubscriptionSheet extends StatefulWidget {
-  const SubscriptionSheet({super.key});
+  final VideoRepository repo;
+  const SubscriptionSheet({super.key, required this.repo});
 
   @override
   State<SubscriptionSheet> createState() => _SubscriptionSheetState();
@@ -25,14 +26,14 @@ class _SubscriptionSheetState extends State<SubscriptionSheet> {
   }
 
   Future<void> _load() async {
-    followed = await VideoRepository.instance().getSubscriptions();
+    followed = await widget.repo.getSubscriptions();
     if (mounted) setState(() {});
   }
 
   Future<void> _search(String keyword) async {
     setState(() { searching = true; results = []; });
     try {
-      results = await VideoRepository.instance().searchUsers(keyword.trim());
+      results = await widget.repo.searchUsers(keyword.trim());
     } catch (_) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('搜索失败，请检查网络后重试')));
     }
@@ -40,7 +41,7 @@ class _SubscriptionSheetState extends State<SubscriptionSheet> {
   }
 
   void _unfollow(int mid, String uname) async {
-    await VideoRepository.instance().removeSubscription(mid);
+    await widget.repo.removeSubscription(mid);
     setState(() => followed.removeWhere((f) => f.mid == mid));
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -53,7 +54,7 @@ class _SubscriptionSheetState extends State<SubscriptionSheet> {
   }
 
   void _follow(int mid, String uname, String face) async {
-    final ok = await VideoRepository.instance().addSubscription(mid, uname, face: face);
+    final ok = await widget.repo.addSubscription(mid, uname, face: face);
     if (!mounted) return;
     if (ok) {
       setState(() { followed.insert(0, (mid: mid, name: uname, face: face)); });

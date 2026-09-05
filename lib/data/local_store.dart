@@ -2,6 +2,10 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class LocalStore {
+  static const int maxHistoryItems = 50;
+  static const int maxWatchLaterItems = 5;
+  static const int maxSubscriptions = 50;
+
   final SharedPreferences _p;
 
   LocalStore(this._p);

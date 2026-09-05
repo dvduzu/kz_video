@@ -1,18 +1,19 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'bilibili_client.dart';
+import 'credential_store.dart';
 import 'local_store.dart';
 import '../core/logger.dart';
 
 class AuthRepository {
   final BilibiliClient client;
   final LocalStore store;
+  final CredentialStore credentials;
   final Dio dio;
 
-  static const _storage = FlutterSecureStorage();
-
-  AuthRepository(this.client, this.store) : dio = client.dio;
+  AuthRepository(this.client, this.store)
+      : credentials = CredentialStore(),
+        dio = client.dio;
 
   int _parseSessExpires(String sessdata) {
     try {
@@ -94,7 +95,7 @@ class AuthRepository {
       final loginAt = DateTime.now().millisecondsSinceEpoch;
       final sess = parsed['SESSDATA'] ?? '';
       client.auth.setLoginTimestamps(loginAt, _parseSessExpires(sess));
-      await _storage.write(key: 'login_cookie', value: cookieHeader);
+      await credentials.writeLoginCookie(cookieHeader);
     } else {
       client.auth.setFullCookies(before);
     }
@@ -121,7 +122,7 @@ class AuthRepository {
   }
 
   Future<void> restoreLogin() async {
-    final saved = await _storage.read(key: 'login_cookie');
+    final saved = await credentials.readLoginCookie();
     if (saved != null && saved.isNotEmpty) {
       await loginWithCookie(saved);
     }
@@ -129,7 +130,7 @@ class AuthRepository {
   }
 
   Future<void> logout() async {
-    await _storage.delete(key: 'login_cookie');
+    await credentials.deleteLoginCookie();
     client.auth.setLoginState(false, '');
     client.auth.setLoginTimestamps(0, 0);
     client.auth.removeLoginCookies();

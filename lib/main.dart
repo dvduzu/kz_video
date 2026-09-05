@@ -12,13 +12,14 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-  VideoRepository.init(await VideoRepository.create());
-  VideoRepository.instance().restoreLogin();
-  runApp(const MyApp());
+  final repo = await VideoRepository.create();
+  repo.restoreLogin();
+  runApp(MyApp(repo: repo));
 }
 
 class MyApp extends StatefulWidget {
-  const MyApp({super.key});
+  final VideoRepository repo;
+  const MyApp({super.key, required this.repo});
   @override
   State<MyApp> createState() => _MyAppState();
 }
@@ -72,7 +73,7 @@ class _MyAppState extends State<MyApp> {
         theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: seedColor), useMaterial3: true, snackBarTheme: _snackBarTheme(Brightness.light, seedColor)),
         darkTheme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: seedColor, brightness: Brightness.dark), useMaterial3: true, snackBarTheme: _snackBarTheme(Brightness.dark, seedColor)),
         themeMode: mode,
-        home: App(mode: mode, onToggleTheme: toggle, seed: seed, onSetTheme: setTheme),
+        home: App(repo: widget.repo, mode: mode, onToggleTheme: toggle, seed: seed, onSetTheme: setTheme),
       );
     });
   }
@@ -85,11 +86,12 @@ class _MyAppState extends State<MyApp> {
 }
 
 class App extends StatefulWidget {
+  final VideoRepository repo;
   final ThemeMode mode;
   final VoidCallback onToggleTheme;
   final Color? seed;
   final Future<void> Function(ThemeMode, Color?) onSetTheme;
-  const App({super.key, required this.mode, required this.onToggleTheme, required this.seed, required this.onSetTheme});
+  const App({super.key, required this.repo, required this.mode, required this.onToggleTheme, required this.seed, required this.onSetTheme});
 
   @override
   State<App> createState() => _AppState();
@@ -102,8 +104,8 @@ class _AppState extends State<App> {
   Widget build(BuildContext context) {
     final video = playing;
     if (video == null) {
-      return VideoListScreen(mode: widget.mode, onToggleTheme: widget.onToggleTheme, seed: widget.seed, onSetTheme: widget.onSetTheme, onPlay: (v) => setState(() => playing = v));
+      return VideoListScreen(repo: widget.repo, mode: widget.mode, onToggleTheme: widget.onToggleTheme, seed: widget.seed, onSetTheme: widget.onSetTheme, onPlay: (v) => setState(() => playing = v));
     }
-    return PlayerScreen(video: video, onBack: () => setState(() => playing = null));
+    return PlayerScreen(repo: widget.repo, video: video, onBack: () => setState(() => playing = null));
   }
 }

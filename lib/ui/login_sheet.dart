@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../data/video_repository.dart';
 
-Future<void> showLoginDialog(BuildContext context) async {
-  final repo = VideoRepository.instance();
+Future<void> showLoginDialog(BuildContext context, VideoRepository repo) async {
   final loggedIn = repo.hasAccount;
   if (loggedIn) {
     String fmt(int ms) {
@@ -35,15 +34,14 @@ Future<void> showLoginDialog(BuildContext context) async {
     title: const Text('登录'),
     content: const Text('选择登录方式：'),
     actions: [
-      TextButton(onPressed: () { Navigator.pop(ctx); showQrLoginDialog(context); }, child: const Text('扫码登录')),
-      TextButton(onPressed: () { Navigator.pop(ctx); showCookieLoginDialog(context); }, child: const Text('Cookie 登录')),
+      TextButton(onPressed: () { Navigator.pop(ctx); showQrLoginDialog(context, repo); }, child: const Text('扫码登录')),
+      TextButton(onPressed: () { Navigator.pop(ctx); showCookieLoginDialog(context, repo); }, child: const Text('Cookie 登录')),
       TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
     ],
   ));
 }
 
-void showCookieLoginDialog(BuildContext context) {
-  final repo = VideoRepository.instance();
+void showCookieLoginDialog(BuildContext context, VideoRepository repo) {
   final ctl = TextEditingController();
   showDialog(context: context, builder: (ctx) => AlertDialog(
     title: const Text('Cookie 登录'),
@@ -69,8 +67,7 @@ void showCookieLoginDialog(BuildContext context) {
   ));
 }
 
-void showQrLoginDialog(BuildContext context) {
-  final repo = VideoRepository.instance();
+void showQrLoginDialog(BuildContext context, VideoRepository repo) {
   final qrUrl = ValueNotifier<String?>(null);
   final status = ValueNotifier('正在获取二维码…');
   showDialog(context: context, builder: (ctx) => ValueListenableBuilder<String?>(

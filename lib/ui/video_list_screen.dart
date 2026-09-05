@@ -7,12 +7,13 @@ import 'subscription_sheet.dart';
 import '../core/logger.dart';
 
 class VideoListScreen extends StatefulWidget {
+  final VideoRepository repo;
   final void Function(VideoInfo) onPlay;
   final ThemeMode mode;
   final VoidCallback onToggleTheme;
   final Color? seed;
   final Future<void> Function(ThemeMode, Color?) onSetTheme;
-  const VideoListScreen({super.key, required this.onPlay, required this.mode, required this.onToggleTheme, required this.seed, required this.onSetTheme});
+  const VideoListScreen({super.key, required this.repo, required this.onPlay, required this.mode, required this.onToggleTheme, required this.seed, required this.onSetTheme});
 
   @override
   State<VideoListScreen> createState() => _VideoListScreenState();
@@ -32,18 +33,18 @@ class _VideoListScreenState extends State<VideoListScreen> {
   }
 
   Future<void> _onRefresh() async {
-    // if (!await VideoRepository.instance().canRefreshToday()) {
+    // if (!await widget.repo.canRefreshToday()) {
     //   if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('今天已结束，明天再来')));
     //   return;
     // }
-    // await VideoRepository.instance().recordRefresh();
+    // await widget.repo.recordRefresh();
     await _load(force: true);
   }
 
   Future<void> _load({bool force = false}) async {
     setState(() { loading = true; error = null; });
     try {
-      final list = await VideoRepository.instance().getDailyVideos(force: force);
+      final list = await widget.repo.getDailyVideos(force: force);
       setState(() { videos = list; loading = false; });
     } catch (e) {
       KzvLogger.debug('load error: $e');
@@ -178,7 +179,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
   Future<void> _skipSelected() async {
     final items = (videos ?? []).where((e) => selected.contains(e.bvid)).toList();
     for (final v in items) {
-      await VideoRepository.instance().addBlacklist(v);
+      await widget.repo.addBlacklist(v);
     }
     if (!mounted) return;
     setState(() {
@@ -189,19 +190,19 @@ class _VideoListScreenState extends State<VideoListScreen> {
   }
 
   Future<void> _showHistory() async {
-    if (!await VideoRepository.instance().isHistoryEnabled()) {
+    if (!await widget.repo.isHistoryEnabled()) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('历史记录已在设置中关闭')));
       return;
     }
-    await _showCollection('历史', VideoRepository.instance().getHistory, Icons.history);
+    await _showCollection('历史', widget.repo.getHistory, Icons.history);
   }
 
   Future<void> _showWatchLater() async {
-    if (!await VideoRepository.instance().isWatchLaterEnabled()) {
+    if (!await widget.repo.isWatchLaterEnabled()) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('稍后再看已在设置中关闭')));
       return;
     }
-    await _showCollection('稍后再看', VideoRepository.instance().getWatchLater, Icons.bookmarks_outlined);
+    await _showCollection('稍后再看', widget.repo.getWatchLater, Icons.bookmarks_outlined);
   }
 
   Future<void> _showCollection(String title, Future<List<VideoInfo>> Function() loader, IconData icon) async {
@@ -219,7 +220,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
             return ListTile(
               title: Text(v.title, maxLines: 1, overflow: TextOverflow.ellipsis),
               trailing: title == '稍后再看' ? IconButton(icon: const Icon(Icons.close), onPressed: () async {
-                await VideoRepository.instance().removeWatchLater(v.bvid);
+                await widget.repo.removeWatchLater(v.bvid);
                 if (ctx.mounted) Navigator.pop(ctx);
                 _showWatchLater();
               }) : null,
@@ -232,7 +233,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
   }
 
   Future<void> _showSubscriptions() async {
-    showModalBottomSheet(context: context, showDragHandle: true, isScrollControlled: true, builder: (_) => const SubscriptionSheet());
+    showModalBottomSheet(context: context, showDragHandle: true, isScrollControlled: true, builder: (_) => SubscriptionSheet(repo: widget.repo));
   }
 
   void _showColorSettings() {
@@ -271,7 +272,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
 
 
   Future<void> _showBlacklist() async {
-    final items = await VideoRepository.instance().getBlacklistItems();
+    final items = await widget.repo.getBlacklistItems();
     if (!mounted) return;
     showModalBottomSheet(context: context, showDragHandle: true, builder: (ctx) => SizedBox(
       height: MediaQuery.of(ctx).size.height * 0.6,
@@ -285,7 +286,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
             return ListTile(
               title: Text(v.title, maxLines: 1, overflow: TextOverflow.ellipsis),
               trailing: IconButton(icon: const Icon(Icons.undo), tooltip: '移出黑名单', onPressed: () async {
-                await VideoRepository.instance().removeBlacklist(v.bvid);
+                await widget.repo.removeBlacklist(v.bvid);
                 if (ctx.mounted) Navigator.pop(ctx);
                 _showBlacklist();
               }),
@@ -299,6 +300,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
   Future<void> _showSettings() async {
     final changed = await Navigator.push<bool>(context, MaterialPageRoute(
       builder: (_) => SettingsPage(
+        repo: widget.repo,
         onOpenColorSettings: _showColorSettings,
         onOpenSubscriptions: _showSubscriptions,
         onOpenBlacklist: _showBlacklist,

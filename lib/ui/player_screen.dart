@@ -8,9 +8,10 @@ import '../data/video_repository.dart';
 import '../core/logger.dart';
 
 class PlayerScreen extends StatefulWidget {
+  final VideoRepository repo;
   final VideoInfo video;
   final VoidCallback onBack;
-  const PlayerScreen({super.key, required this.video, required this.onBack});
+  const PlayerScreen({super.key, required this.repo, required this.video, required this.onBack});
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -44,11 +45,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     player = Player();
     controller = VideoController(player);
     _listen();
-    VideoRepository.instance().isWatchLaterEnabled().then((v) { if (mounted) setState(() => watchLaterEnabled = v); });
+    widget.repo.isWatchLaterEnabled().then((v) { if (mounted) setState(() => watchLaterEnabled = v); });
     if (widget.video.mid > 0) {
-      VideoRepository.instance().isSubscribed(widget.video.mid).then((v) { if (mounted) setState(() => subscribed = v); });
+      widget.repo.isSubscribed(widget.video.mid).then((v) { if (mounted) setState(() => subscribed = v); });
     }
-    VideoRepository.instance().getWatchLater().then((list) {
+    widget.repo.getWatchLater().then((list) {
       if (mounted) setState(() => watchLaterAdded = list.any((v) => v.bvid == widget.video.bvid));
     });
     _load();
@@ -81,13 +82,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
       int? resumeMs;
       if (ready) {
         resumeMs = player.state.position.inMilliseconds;
-        await VideoRepository.instance().saveProgress(widget.video.bvid, resumeMs, player.state.duration.inMilliseconds);
+        await widget.repo.saveProgress(widget.video.bvid, resumeMs, player.state.duration.inMilliseconds);
         await player.stop();
         setState(() => ready = false);
         setState(() { _subtitleCues = null; });
       }
-      final url = await VideoRepository.instance().getPlayUrl(widget.video.bvid, qn: qn);
-      final buvid3 = VideoRepository.instance().buvid3;
+      final url = await widget.repo.getPlayUrl(widget.video.bvid, qn: qn);
+      final buvid3 = widget.repo.buvid3;
       final headers = <String, String>{
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Referer': 'https://www.bilibili.com/video/${widget.video.bvid}',
@@ -95,7 +96,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       };
       await player.open(Media(url, httpHeaders: headers));
       await player.setRate(speed);
-      final seekTarget = resumeMs ?? (await VideoRepository.instance().getProgress(widget.video.bvid))?.positionMs;
+      final seekTarget = resumeMs ?? (await widget.repo.getProgress(widget.video.bvid))?.positionMs;
       if (seekTarget != null && seekTarget > 0) {
         for (var i = 0; i < 20 && player.state.duration.inMilliseconds <= 0; i++) {
           await Future<void>.delayed(const Duration(milliseconds: 100));
@@ -105,7 +106,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       await player.play();
       if (mounted) setState(() { ready = true; currentQn = qn; });
       _retryCount = 0;
-      VideoRepository.instance().addHistory(widget.video);
+      widget.repo.addHistory(widget.video);
       _loadSubtitle();
       _startHideTimer();
     } catch (e) {
@@ -114,7 +115,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _loadSubtitle() async {
-    final cues = await VideoRepository.instance().getSubtitles(widget.video.bvid);
+    final cues = await widget.repo.getSubtitles(widget.video.bvid);
     if (!mounted || cues == null || cues.isEmpty) return;
     KzvLogger.debug('subtitle loaded cues=${cues.length}');
     setState(() { _subtitleCues = cues; });
@@ -204,7 +205,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void dispose() {
     if (ready) {
-      VideoRepository.instance().saveProgress(widget.video.bvid, player.state.position.inMilliseconds, player.state.duration.inMilliseconds);
+      widget.repo.saveProgress(widget.video.bvid, player.state.position.inMilliseconds, player.state.duration.inMilliseconds);
     }
     hideTimer?.cancel();
     _toastTimer?.cancel();
@@ -371,13 +372,13 @@ IconButton(
                       icon: Icon(watchLaterAdded ? Icons.bookmark : Icons.bookmark_add_outlined, color: watchLaterAdded ? Theme.of(context).colorScheme.primary : Colors.white),
                       onPressed: () async {
                         if (watchLaterAdded) {
-                          await VideoRepository.instance().removeWatchLater(widget.video.bvid);
+                          await widget.repo.removeWatchLater(widget.video.bvid);
                           if (mounted) {
                             setState(() => watchLaterAdded = false);
                             _toast('已取消稍后再看');
                           }
                         } else {
-                          await VideoRepository.instance().addWatchLater(widget.video);
+                          await widget.repo.addWatchLater(widget.video);
                           if (mounted) {
                             setState(() => watchLaterAdded = true);
                             _toast('已加入稍后再看');
@@ -391,14 +392,14 @@ IconButton(
                         icon: Icon(subscribed ? Icons.person : Icons.person_add_alt, color: subscribed ? Theme.of(context).colorScheme.primary : Colors.white),
                         onPressed: () async {
                           if (subscribed) {
-                            await VideoRepository.instance().removeSubscription(widget.video.mid);
+                            await widget.repo.removeSubscription(widget.video.mid);
                             if (mounted) {
                               setState(() => subscribed = false);
                               _toast('已取消关注');
                             }
                             return;
                           }
-                          final ok = await VideoRepository.instance().addSubscription(widget.video.mid, widget.video.owner);
+                          final ok = await widget.repo.addSubscription(widget.video.mid, widget.video.owner);
                           if (mounted) {
                             if (ok) {
                               setState(() => subscribed = true);

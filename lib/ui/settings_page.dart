@@ -4,10 +4,11 @@ import '../data/video_repository.dart';
 import 'login_sheet.dart';
 
 class SettingsPage extends StatefulWidget {
+  final VideoRepository repo;
   final VoidCallback onOpenColorSettings;
   final VoidCallback onOpenSubscriptions;
   final VoidCallback onOpenBlacklist;
-  const SettingsPage({super.key, required this.onOpenColorSettings, required this.onOpenSubscriptions, required this.onOpenBlacklist});
+  const SettingsPage({super.key, required this.repo, required this.onOpenColorSettings, required this.onOpenSubscriptions, required this.onOpenBlacklist});
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -57,12 +58,12 @@ class _SettingsPageState extends State<SettingsPage> {
     await prefs.setBool('setting_rcmd_enabled', _rcmdEnabled);
     await prefs.setInt('setting_rcmd_batch', _rcmdBatch);
     await prefs.setStringList('setting_rcmd_rids', _rcmdRids.toList());
-    await VideoRepository.instance().setGuestMode(_guestMode);
+    await widget.repo.setGuestMode(_guestMode);
   }
 
   @override
   Widget build(BuildContext context) {
-    final repo = VideoRepository.instance();
+    final repo = widget.repo;
     return Scaffold(
       appBar: AppBar(title: const Text('设置')),
       body: ListView(
@@ -137,7 +138,7 @@ class _SettingsPageState extends State<SettingsPage> {
             leading: Icon(repo.hasAccount ? Icons.account_circle : Icons.login),
             title: Text(repo.hasAccount ? '登录状态：${repo.loginName}' : '登录'),
             subtitle: const Text('扫码登录 / Cookie 登录'),
-            onTap: () => showLoginDialog(context),
+            onTap: () => showLoginDialog(context, widget.repo),
           ),
           if (repo.hasAccount)
             Padding(
