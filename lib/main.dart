@@ -14,6 +14,10 @@ void main() async {
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   final repo = await VideoRepository.create();
   repo.restoreLogin();
+  final homeRid = repo.settings.homeRid;
+  if (homeRid.isNotEmpty && homeRid != repo.settings.rid) {
+    await repo.settings.setRid(homeRid);
+  }
   runApp(MyApp(repo: repo));
 }
 
@@ -104,9 +108,10 @@ class _AppState extends State<App> {
   @override
   Widget build(BuildContext context) {
     final video = playing;
-    if (video == null) {
-      return VideoListScreen(key: _listKey, repo: widget.repo, mode: widget.mode, onToggleTheme: widget.onToggleTheme, seed: widget.seed, onSetTheme: widget.onSetTheme, onPlay: (v) => setState(() => playing = v));
-    }
-    return PlayerScreen(repo: widget.repo, video: video, onBack: () => setState(() => playing = null), onWatched: (v) => _listKey.currentState?.markWatched(v));
+    return Stack(children: [
+      VideoListScreen(key: _listKey, repo: widget.repo, mode: widget.mode, onToggleTheme: widget.onToggleTheme, seed: widget.seed, onSetTheme: widget.onSetTheme, onPlay: (v) => setState(() => playing = v)),
+      if (video != null)
+        PlayerScreen(repo: widget.repo, video: video, onBack: () => setState(() => playing = null), onWatched: (v) => _listKey.currentState?.markWatched(v)),
+    ]);
   }
 }

@@ -33,10 +33,6 @@ class VideoListScreenState extends State<VideoListScreen> {
   @override
   void initState() {
     super.initState();
-    final homeRid = widget.repo.settings.homeRid;
-    if (homeRid != widget.repo.settings.rid) {
-      widget.repo.settings.setRid(homeRid);
-    }
     _load();
   }
 
@@ -111,6 +107,11 @@ class VideoListScreenState extends State<VideoListScreen> {
     }[key] ?? '全部';
   }
 
+  String _today() {
+    final now = DateTime.now();
+    return '${now.month}月${now.day}日';
+  }
+
   String _duration(int s) {
     final h = s ~/ 3600; final m = (s % 3600) ~/ 60; final sec = s % 60;
     return h > 0 ? '$h:${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}' : '${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
@@ -131,7 +132,7 @@ class VideoListScreenState extends State<VideoListScreen> {
       appBar: AppBar(
         title: GestureDetector(
           onTap: editing ? null : _onTitleTap,
-          child: Text(editing ? '已选择 ${selected.length} 项' : _ridName(widget.repo.settings.rid)),
+          child: Text(editing ? '已选择 ${selected.length} 项' : '${_ridName(widget.repo.settings.rid)} · ${_today()}'),
         ),
         leading: editing
             ? IconButton(icon: const Icon(Icons.close), onPressed: _exitEditing)

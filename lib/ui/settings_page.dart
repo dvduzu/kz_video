@@ -95,17 +95,12 @@ class _SettingsPageState extends State<SettingsPage> {
             selected: _rid == e.key,
             onSelected: (_) => setState(() => _rid = e.key),
           )).toList()),
-          const SizedBox(height: 16),
-          const Text('主页分区', style: TextStyle(fontWeight: FontWeight.bold)),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 2),
-            child: Text('启动时默认进入的分区', style: TextStyle(fontSize: 12, color: Colors.grey)),
+          SwitchListTile(
+            title: const Text('设为启动主页'),
+            subtitle: const Text('启动时默认进入当前分区'),
+            value: _rid == _homeRid,
+            onChanged: (v) => setState(() => _homeRid = v ? _rid : ''),
           ),
-          Wrap(spacing: 8, children: _rids.entries.map((e) => ChoiceChip(
-            label: Text(e.value),
-            selected: _homeRid == e.key,
-            onSelected: (_) => setState(() => _homeRid = e.key),
-          )).toList()),
           const SizedBox(height: 16),
           const Text('长视频阈值', style: TextStyle(fontWeight: FontWeight.bold)),
           Wrap(spacing: 8, children: _durs.entries.map((e) => ChoiceChip(
