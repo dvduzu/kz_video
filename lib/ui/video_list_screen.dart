@@ -33,6 +33,17 @@ class _VideoListScreenState extends State<VideoListScreen> {
     _load();
   }
 
+  Future<void> _markAllWatched() async {
+    final list = videos ?? const [];
+    for (final v in list) {
+      await widget.repo.markWatched(v.bvid);
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已标记全部看完')));
+      await _load(force: true);
+    }
+  }
+
   Future<void> _onTitleTap() async {
     _titleTaps++;
     if (_titleTaps >= 10) {
@@ -40,6 +51,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
       final unlimited = !widget.repo.unlimitedRefresh;
       await widget.repo.setUnlimitedRefresh(unlimited);
       if (mounted) {
+        setState(() {});
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(unlimited ? 'debug' : 'release')));
       }
     }
@@ -111,6 +123,8 @@ class _VideoListScreenState extends State<VideoListScreen> {
                 IconButton(icon: const Icon(Icons.history), tooltip: '历史', onPressed: _showHistory),
                 IconButton(icon: const Icon(Icons.bookmarks_outlined), tooltip: '收藏', onPressed: _showWatchLater),
                 IconButton(icon: const Icon(Icons.settings_outlined), tooltip: '设置', onPressed: _showSettings),
+                if (widget.repo.unlimitedRefresh)
+                  IconButton(icon: const Icon(Icons.done_all), tooltip: '一键看完(Debug)', onPressed: _markAllWatched),
               ],
       ),
       body: Builder(builder: (context) {
