@@ -181,7 +181,7 @@ class VideoListScreenState extends State<VideoListScreen> {
                 ),
                 GestureDetector(
                   onTap: _onTitleTap,
-                  child: Text(' · ${_today()}'),
+                  child: Text(' ${_today()}'),
                 ),
               ]),
         leading: editing

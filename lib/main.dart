@@ -15,7 +15,7 @@ void main() async {
   final repo = await VideoRepository.create();
   repo.restoreLogin();
   final homeRid = repo.settings.homeRid;
-  if (homeRid.isNotEmpty && homeRid != repo.settings.rid) {
+  if (homeRid != repo.settings.rid) {
     await repo.settings.setRid(homeRid);
   }
   runApp(MyApp(repo: repo));
