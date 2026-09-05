@@ -171,4 +171,8 @@ class VideoRepository {
     final today = _today();
     await store.setRefreshCount(today, store.getRefreshCount(today) + 1);
   }
+
+  Future<void> resetRefreshCount() async {
+    await store.setRefreshCount(_today(), 0);
+  }
 }
