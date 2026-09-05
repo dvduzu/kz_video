@@ -32,7 +32,6 @@ class LocalStore {
   String get rid => _p.getString('setting_rid') ?? '';
   bool get rcmdEnabled => _p.getBool('setting_rcmd_enabled') ?? false;
   int get rcmdBatch => _p.getInt('setting_rcmd_batch') ?? 3;
-  List<String> get rcmdRids => _p.getStringList('setting_rcmd_rids') ?? const ['', 'tech', 'edu', 'life', 'game', 'ent', 'music'];
   bool get guestMode => _p.getBool('guest_mode') ?? false;
 
   Future<void> setGuestMode(bool v) => _p.setBool('guest_mode', v);
@@ -42,7 +41,6 @@ class LocalStore {
   Future<void> setRid(String v) => _p.setString('setting_rid', v);
   Future<void> setRcmdEnabled(bool v) => _p.setBool('setting_rcmd_enabled', v);
   Future<void> setRcmdBatch(int v) => _p.setInt('setting_rcmd_batch', v);
-  Future<void> setRcmdRids(List<String> v) => _p.setStringList('setting_rcmd_rids', v);
 
   List<Map<String, dynamic>> _readList(String key) {
     final raw = _p.getStringList(key) ?? [];

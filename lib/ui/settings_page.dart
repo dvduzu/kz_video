@@ -20,12 +20,10 @@ class _SettingsPageState extends State<SettingsPage> {
   late bool _watchLater;
   late bool _rcmdEnabled;
   late int _rcmdBatch;
-  late Set<String> _rcmdRids;
   late bool _guestMode;
 
   static const _durs = {600: '10 分钟', 1200: '20 分钟', 1800: '30 分钟'};
   static const _rids = {'': '全部', 'tech': '科技', 'edu': '知识', 'life': '美食', 'game': '游戏', 'ent': '娱乐', 'music': '音乐', 'sub': '订阅'};
-  static const _rcmdRidLabels = {'': '全部', 'tech': '科技', 'edu': '知识', 'life': '美食', 'game': '游戏', 'ent': '娱乐', 'music': '音乐'};
 
   @override
   void initState() {
@@ -42,7 +40,6 @@ class _SettingsPageState extends State<SettingsPage> {
       _watchLater = s.isWatchLaterEnabled;
       _rcmdEnabled = s.rcmdEnabled;
       _rcmdBatch = s.rcmdBatch;
-      _rcmdRids = s.rcmdRids.toSet();
       _guestMode = s.guestMode;
     });
   }
@@ -55,7 +52,6 @@ class _SettingsPageState extends State<SettingsPage> {
     await s.setWatchLaterEnabled(_watchLater);
     await s.setRcmdEnabled(_rcmdEnabled);
     await s.setRcmdBatch(_rcmdBatch);
-    await s.setRcmdRids(_rcmdRids.toList());
     await widget.repo.setGuestMode(_guestMode);
   }
 
@@ -96,7 +92,7 @@ class _SettingsPageState extends State<SettingsPage> {
               ExpansionTile(
                 leading: const Icon(Icons.tune),
                 title: const Text('推荐参数'),
-                subtitle: const Text('拉取批数 / 个性化分区'),
+                subtitle: const Text('拉取批数'),
                 tilePadding: const EdgeInsets.symmetric(horizontal: 16),
                 childrenPadding: const EdgeInsets.symmetric(horizontal: 16),
                 children: [
@@ -107,18 +103,6 @@ class _SettingsPageState extends State<SettingsPage> {
                       label: Text('$b'),
                       selected: _rcmdBatch == b,
                       onSelected: (_) => setState(() => _rcmdBatch = b),
-                    )).toList()),
-                  ]),
-                  const SizedBox(height: 8),
-                  Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    const Text('个性化分区', style: TextStyle(fontSize: 13)),
-                    const SizedBox(height: 6),
-                    Wrap(spacing: 8, children: _rcmdRidLabels.entries.map((e) => FilterChip(
-                      label: Text(e.value),
-                      selected: _rcmdRids.contains(e.key),
-                      onSelected: (sel) => setState(() {
-                        if (sel) { _rcmdRids.add(e.key); } else { _rcmdRids.remove(e.key); }
-                      }),
                     )).toList()),
                   ]),
                   const SizedBox(height: 8),

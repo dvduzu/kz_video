@@ -139,8 +139,7 @@ class FeedService {
     final watched = store.watched.toSet();
     if (ridKey != 'sub') {
       final rcmdOn = store.rcmdEnabled;
-      final rcmdRids = store.rcmdRids.toSet();
-      if (rcmdOn && rcmdRids.contains(ridKey)) {
+      if (rcmdOn && ridKey == '') {
         final batch = store.rcmdBatch;
         final rcmdVideos = await _getRcmdVideos(batch: batch);
         final rcmdFiltered = rcmdVideos.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid) && !watched.contains(v.bvid)).toList();
