@@ -98,9 +98,17 @@ class VideoListScreenState extends State<VideoListScreen> {
     }
   }
 
-  String _today() {
-    final now = DateTime.now();
-    return '${now.month}月${now.day}日';
+  String _ridName(String key) {
+    return const {
+      '': '全部',
+      'tech': '科技',
+      'edu': '知识',
+      'life': '美食',
+      'game': '游戏',
+      'ent': '娱乐',
+      'music': '音乐',
+      'sub': '订阅',
+    }[key] ?? '全部';
   }
 
   String _duration(int s) {
@@ -123,7 +131,7 @@ class VideoListScreenState extends State<VideoListScreen> {
       appBar: AppBar(
         title: GestureDetector(
           onTap: editing ? null : _onTitleTap,
-          child: Text(editing ? '已选择 ${selected.length} 项' : '今日精选 · ${_today()}'),
+          child: Text(editing ? '已选择 ${selected.length} 项' : _ridName(widget.repo.settings.rid)),
         ),
         leading: editing
             ? IconButton(icon: const Icon(Icons.close), onPressed: _exitEditing)
