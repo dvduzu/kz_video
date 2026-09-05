@@ -158,4 +158,17 @@ class VideoRepository {
     await store.setSubscriptions(list);
   }
 
+  static String _today() {
+    final now = DateTime.now();
+    return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+  }
+
+  Future<bool> canRefreshToday() async {
+    return store.getRefreshCount(_today()) < 5;
+  }
+
+  Future<void> recordRefresh() async {
+    final today = _today();
+    await store.setRefreshCount(today, store.getRefreshCount(today) + 1);
+  }
 }

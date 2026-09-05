@@ -33,11 +33,11 @@ class _VideoListScreenState extends State<VideoListScreen> {
   }
 
   Future<void> _onRefresh() async {
-    // if (!await widget.repo.canRefreshToday()) {
-    //   if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('今天已结束，明天再来')));
-    //   return;
-    // }
-    // await widget.repo.recordRefresh();
+    if (!await widget.repo.canRefreshToday()) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('今天已结束，明天再来')));
+      return;
+    }
+    await widget.repo.recordRefresh();
     await _load(force: true);
   }
 
