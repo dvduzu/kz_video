@@ -135,14 +135,13 @@ class FeedService {
       }
     }
     final blacklist = await _getBlacklistSet();
-    final watched = store.watched.toSet();
     if (ridKey != 'sub') {
       final rcmdOn = store.rcmdEnabled;
       final rcmdRids = store.rcmdRids.toSet();
       if (rcmdOn && rcmdRids.contains(ridKey)) {
         final batch = store.rcmdBatch;
         final rcmdVideos = await _getRcmdVideos(batch: batch);
-        final rcmdFiltered = rcmdVideos.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid) && !watched.contains(v.bvid)).toList();
+        final rcmdFiltered = rcmdVideos.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid)).toList();
         KzvLogger.debug('rcmd raw=${rcmdVideos.length} filtered=$minDuration→${rcmdFiltered.length}');
         if (rcmdFiltered.isNotEmpty) {
           final picked = rcmdFiltered.take(rcmdPickLimit).toList()..shuffle(Random());
@@ -163,7 +162,7 @@ class FeedService {
     }
     final subVideos = await _fetchSubVideos(ridMain);
     if (ridKey == 'sub') {
-      final subFiltered = subVideos.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid) && !watched.contains(v.bvid)).toList()
+      final subFiltered = subVideos.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid)).toList()
         ..sort((a, b) => b.pubdate.compareTo(a.pubdate));
       final picked = subFiltered.take(popularPickLimit).toList()..shuffle(Random());
       final chosen = picked.take(dailyChosenCount).toList();
@@ -174,7 +173,7 @@ class FeedService {
       }
       return chosen;
     }
-    final popularFiltered = popular.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid) && !watched.contains(v.bvid)).toList()
+    final popularFiltered = popular.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid)).toList()
       ..sort((a, b) => b.pubdate.compareTo(a.pubdate));
     final picked = popularFiltered.take(popularPickLimit).toList()..shuffle(Random());
     final chosen = picked.take(dailyChosenCount).toList();

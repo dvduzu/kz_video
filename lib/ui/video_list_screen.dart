@@ -16,16 +16,19 @@ class VideoListScreen extends StatefulWidget {
   const VideoListScreen({super.key, required this.repo, required this.onPlay, required this.mode, required this.onToggleTheme, required this.seed, required this.onSetTheme});
 
   @override
-  State<VideoListScreen> createState() => _VideoListScreenState();
+  State<VideoListScreen> createState() => VideoListScreenState();
 }
 
-class _VideoListScreenState extends State<VideoListScreen> {
+class VideoListScreenState extends State<VideoListScreen> {
   List<VideoInfo>? videos;
   String? error;
   bool loading = true;
   bool editing = false;
   int _titleTaps = 0;
+  final Set<String> _watched = {};
   final Set<String> selected = {};
+
+  void markWatched(VideoInfo v) => _markWatched(v);
 
   @override
   void initState() {
@@ -33,14 +36,21 @@ class _VideoListScreenState extends State<VideoListScreen> {
     _load();
   }
 
-  Future<void> _markAllWatched() async {
-    final list = videos ?? const [];
+  void _markWatched(VideoInfo v) {
+    setState(() {
+      videos?.removeWhere((x) => x.bvid == v.bvid);
+      _watched.add(v.bvid);
+    });
+  }
+
+  Future<void> _markSelectedWatched() async {
+    final list = (videos ?? []).where((e) => selected.contains(e.bvid)).toList();
     for (final v in list) {
-      await widget.repo.markWatched(v.bvid);
+      _markWatched(v);
     }
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已标记全部看完')));
-      await _load(force: true);
+      setState(() { selected.clear(); editing = false; });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已标记 ${list.length} 个看完')));
     }
   }
 
@@ -63,6 +73,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
       return;
     }
     await widget.repo.recordRefresh();
+    _watched.clear();
     await _load(force: true);
   }
 
@@ -114,24 +125,37 @@ class _VideoListScreenState extends State<VideoListScreen> {
         actions: editing
             ? [
                 TextButton.icon(
+                  onPressed: selected.isEmpty ? null : _markSelectedWatched,
+                  icon: const Icon(Icons.done_all),
+                  label: const Text('标记看完'),
+                ),
+                TextButton.icon(
                   onPressed: selected.isEmpty ? null : _skipSelected,
                   icon: const Icon(Icons.block),
                   label: const Text('跳过'),
                 ),
               ]
             : [
+                if (widget.repo.unlimitedRefresh)
+                  IconButton(icon: const Icon(Icons.done_all), tooltip: '一键看完(Debug)', onPressed: () => setState(() => editing = true)),
                 IconButton(icon: const Icon(Icons.history), tooltip: '历史', onPressed: _showHistory),
                 IconButton(icon: const Icon(Icons.bookmarks_outlined), tooltip: '收藏', onPressed: _showWatchLater),
                 IconButton(icon: const Icon(Icons.settings_outlined), tooltip: '设置', onPressed: _showSettings),
-                if (widget.repo.unlimitedRefresh)
-                  IconButton(icon: const Icon(Icons.done_all), tooltip: '一键看完(Debug)', onPressed: _markAllWatched),
               ],
       ),
       body: Builder(builder: (context) {
         if (loading) return const Center(child: CircularProgressIndicator());
         if (error != null) return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Text('加载失败：$error'), const SizedBox(height: 12), FilledButton(onPressed: () => _load(force: true), child: const Text('重试'))]));
         final list = videos!;
-        if (list.isEmpty) return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [const Text('¯\\_(ツ)_/¯\n啥都木有'), const SizedBox(height: 12), FilledButton(onPressed: () => _load(force: true), child: const Text('重试'))]));
+        if (list.isEmpty) return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          const Text('¯\\_(ツ)_/¯', style: TextStyle(fontSize: 28)),
+          const SizedBox(height: 16),
+          FilledButton.tonalIcon(
+            onPressed: _onRefresh,
+            icon: const Icon(Icons.refresh, size: 18),
+            label: const Text('换一批'),
+          ),
+        ]));
         return Column(children: [
           Align(
             alignment: Alignment.centerRight,

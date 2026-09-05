@@ -99,13 +99,14 @@ class App extends StatefulWidget {
 
 class _AppState extends State<App> {
   VideoInfo? playing;
+  final _listKey = GlobalKey<VideoListScreenState>();
 
   @override
   Widget build(BuildContext context) {
     final video = playing;
     if (video == null) {
-      return VideoListScreen(repo: widget.repo, mode: widget.mode, onToggleTheme: widget.onToggleTheme, seed: widget.seed, onSetTheme: widget.onSetTheme, onPlay: (v) => setState(() => playing = v));
+      return VideoListScreen(key: _listKey, repo: widget.repo, mode: widget.mode, onToggleTheme: widget.onToggleTheme, seed: widget.seed, onSetTheme: widget.onSetTheme, onPlay: (v) => setState(() => playing = v));
     }
-    return PlayerScreen(repo: widget.repo, video: video, onBack: () => setState(() => playing = null));
+    return PlayerScreen(repo: widget.repo, video: video, onBack: () => setState(() => playing = null), onWatched: (v) => _listKey.currentState?.markWatched(v));
   }
 }

@@ -11,7 +11,8 @@ class PlayerScreen extends StatefulWidget {
   final VideoRepository repo;
   final VideoInfo video;
   final VoidCallback onBack;
-  const PlayerScreen({super.key, required this.repo, required this.video, required this.onBack});
+  final ValueChanged<VideoInfo> onWatched;
+  const PlayerScreen({super.key, required this.repo, required this.video, required this.onBack, required this.onWatched});
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -60,7 +61,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     player.stream.position.listen((_) { if (mounted) setState(() {}); });
     player.stream.duration.listen((_) { if (mounted) setState(() {}); });
     player.stream.completed.listen((_) {
-      widget.repo.markWatched(widget.video.bvid);
+      widget.onWatched(widget.video);
     });
     player.stream.error.listen((e) { _onPlaybackError(e); });
   }

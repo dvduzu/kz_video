@@ -159,14 +159,8 @@ class VideoRepository {
   }
 
   Future<void> markWatched(String bvid) async {
-    final list = store.watched;
-    if (!list.contains(bvid)) {
-      list.add(bvid);
-      await store.setWatched(list);
-    }
+    // 当前批次看完标记由 UI 层管理，这里不再持久化
   }
-
-  Future<Set<String>> getWatchedSet() async => store.watched.toSet();
 
   static String _today() {
     final now = DateTime.now();
