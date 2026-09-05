@@ -126,11 +126,16 @@ class VideoListScreenState extends State<VideoListScreen> {
             ? [
                 TextButton.icon(
                   onPressed: () => setState(() {
-                    selected.clear();
-                    selected.addAll((videos ?? const []).map((e) => e.bvid));
+                    final allSelected = (videos ?? const []).isNotEmpty && selected.length == videos!.length;
+                    if (allSelected) {
+                      selected.clear();
+                    } else {
+                      selected.clear();
+                      selected.addAll((videos ?? const []).map((e) => e.bvid));
+                    }
                   }),
-                  icon: const Icon(Icons.select_all),
-                  label: const Text('全选'),
+                  icon: Icon((videos ?? const []).isNotEmpty && selected.length == videos!.length ? Icons.deselect : Icons.select_all),
+                  label: Text((videos ?? const []).isNotEmpty && selected.length == videos!.length ? '取消全选' : '全选'),
                 ),
                 TextButton.icon(
                   onPressed: selected.isEmpty ? null : _markSelectedWatched,
@@ -271,34 +276,61 @@ class VideoListScreenState extends State<VideoListScreen> {
   Future<void> _showCollection(String title, Future<List<VideoInfo>> Function() loader, IconData icon) async {
     final items = await loader();
     if (!mounted) return;
-    showModalBottomSheet(context: context, showDragHandle: true, builder: (ctx) => SizedBox(
+    var selectMode = false;
+    final selectedSet = <String>{};
+    showModalBottomSheet(context: context, showDragHandle: true, builder: (ctx) => StatefulBuilder(builder: (ctx, setSheet) => SizedBox(
       height: MediaQuery.of(ctx).size.height * 0.6,
       child: Column(children: [
-        ListTile(leading: Icon(icon), title: Text(title, style: Theme.of(ctx).textTheme.titleMedium)),
+        ListTile(
+          leading: Icon(icon),
+          title: Text(selectMode ? '已选择 ${selectedSet.length} 项' : title, style: Theme.of(ctx).textTheme.titleMedium),
+          trailing: selectMode
+              ? TextButton.icon(
+                  onPressed: selectedSet.isEmpty ? null : () async {
+                    for (final bvid in selectedSet) {
+                      if (title == '收藏') {
+                        await widget.repo.removeWatchLater(bvid);
+                      } else {
+                        await widget.repo.removeHistory(bvid);
+                      }
+                    }
+                    if (ctx.mounted) Navigator.pop(ctx);
+                    if (title == '收藏') { await _showWatchLater(); } else { await _showHistory(); }
+                  },
+                  icon: const Icon(Icons.delete_outline),
+                  label: const Text('删除选中'),
+                )
+              : TextButton.icon(
+                  onPressed: items.isEmpty ? null : () => setSheet(() => selectMode = true),
+                  icon: const Icon(Icons.delete_sweep),
+                  label: const Text('删除'),
+                ),
+        ),
         if (items.isEmpty) const Expanded(child: Center(child: Text('暂无内容'))),
         Expanded(child: ListView.builder(
           itemCount: items.length,
           itemBuilder: (_, i) {
             final v = items[i];
             return ListTile(
+              leading: selectMode
+                  ? Icon(selectedSet.contains(v.bvid) ? Icons.check_box : Icons.check_box_outline_blank, color: Theme.of(ctx).colorScheme.primary)
+                  : null,
               title: Text(v.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-              trailing: title == '收藏'
-                ? IconButton(icon: const Icon(Icons.close), onPressed: () async {
-                    await widget.repo.removeWatchLater(v.bvid);
-                    if (ctx.mounted) Navigator.pop(ctx);
-                    _showWatchLater();
-                  })
-                : IconButton(icon: const Icon(Icons.delete_outline), onPressed: () async {
-                    await widget.repo.removeHistory(v.bvid);
-                    if (ctx.mounted) Navigator.pop(ctx);
-                    _showHistory();
-                  }),
-              onTap: () { Navigator.pop(ctx); widget.onPlay(v); },
+              onTap: () {
+                if (selectMode) {
+                  setSheet(() {
+                    if (!selectedSet.remove(v.bvid)) selectedSet.add(v.bvid);
+                  });
+                } else {
+                  Navigator.pop(ctx);
+                  widget.onPlay(v);
+                }
+              },
             );
           },
         )),
       ]),
-    ));
+    )));
   }
 
   Future<void> _showSubscriptions() async {
