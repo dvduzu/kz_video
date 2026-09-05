@@ -285,21 +285,32 @@ class VideoListScreenState extends State<VideoListScreen> {
           leading: Icon(icon),
           title: Text(selectMode ? '已选择 ${selectedSet.length} 项' : title, style: Theme.of(ctx).textTheme.titleMedium),
           trailing: selectMode
-              ? TextButton.icon(
-                  onPressed: selectedSet.isEmpty ? null : () async {
-                    for (final bvid in selectedSet) {
-                      if (title == '收藏') {
-                        await widget.repo.removeWatchLater(bvid);
-                      } else {
-                        await widget.repo.removeHistory(bvid);
+              ? Row(mainAxisSize: MainAxisSize.min, children: [
+                  TextButton.icon(
+                    onPressed: () => setSheet(() {
+                      final allSelected = items.isNotEmpty && selectedSet.length == items.length;
+                      selectedSet.clear();
+                      if (!allSelected) selectedSet.addAll(items.map((e) => e.bvid));
+                    }),
+                    icon: Icon(items.isNotEmpty && selectedSet.length == items.length ? Icons.deselect : Icons.select_all),
+                    label: Text(items.isNotEmpty && selectedSet.length == items.length ? '取消全选' : '全选'),
+                  ),
+                  TextButton.icon(
+                    onPressed: selectedSet.isEmpty ? null : () async {
+                      for (final bvid in selectedSet) {
+                        if (title == '收藏') {
+                          await widget.repo.removeWatchLater(bvid);
+                        } else {
+                          await widget.repo.removeHistory(bvid);
+                        }
                       }
-                    }
-                    if (ctx.mounted) Navigator.pop(ctx);
-                    if (title == '收藏') { await _showWatchLater(); } else { await _showHistory(); }
-                  },
-                  icon: const Icon(Icons.delete_outline),
-                  label: const Text('删除选中'),
-                )
+                      if (ctx.mounted) Navigator.pop(ctx);
+                      if (title == '收藏') { await _showWatchLater(); } else { await _showHistory(); }
+                    },
+                    icon: const Icon(Icons.delete_outline),
+                    label: const Text('删除选中'),
+                  ),
+                ])
               : TextButton.icon(
                   onPressed: items.isEmpty ? null : () => setSheet(() => selectMode = true),
                   icon: const Icon(Icons.delete_sweep),
