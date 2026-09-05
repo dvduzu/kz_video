@@ -158,6 +158,16 @@ class VideoRepository {
     await store.setSubscriptions(list);
   }
 
+  Future<void> markWatched(String bvid) async {
+    final list = store.watched;
+    if (!list.contains(bvid)) {
+      list.add(bvid);
+      await store.setWatched(list);
+    }
+  }
+
+  Future<Set<String>> getWatchedSet() async => store.watched.toSet();
+
   static String _today() {
     final now = DateTime.now();
     return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';

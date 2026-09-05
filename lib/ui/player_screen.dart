@@ -59,6 +59,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     player.stream.playing.listen((_) { if (mounted) setState(() {}); });
     player.stream.position.listen((_) { if (mounted) setState(() {}); });
     player.stream.duration.listen((_) { if (mounted) setState(() {}); });
+    player.stream.completed.listen((_) {
+      widget.repo.markWatched(widget.video.bvid);
+    });
     player.stream.error.listen((e) { _onPlaybackError(e); });
   }
 

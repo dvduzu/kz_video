@@ -117,7 +117,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
         if (loading) return const Center(child: CircularProgressIndicator());
         if (error != null) return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Text('加载失败：$error'), const SizedBox(height: 12), FilledButton(onPressed: () => _load(force: true), child: const Text('重试'))]));
         final list = videos!;
-        if (list.isEmpty) return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [const Text('今天还没有内容'), const SizedBox(height: 12), FilledButton(onPressed: () => _load(force: true), child: const Text('重试'))]));
+        if (list.isEmpty) return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [const Text('¯\\_(ツ)_/¯\n啥都木有'), const SizedBox(height: 12), FilledButton(onPressed: () => _load(force: true), child: const Text('重试'))]));
         return Column(children: [
           Align(
             alignment: Alignment.centerRight,
