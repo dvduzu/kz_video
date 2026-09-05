@@ -7,7 +7,6 @@ import 'api_exception.dart';
 import 'bilibili_client.dart';
 import 'local_store.dart';
 import 'models.dart';
-import 'wbi_sign.dart';
 
 class VideoRepository {
   static VideoRepository? _instance;
@@ -105,7 +104,7 @@ class VideoRepository {
   }
 
   Future<bool> loginWithCookie(String cookieHeader) async {
-    await client.ensureBuvid();
+    await client.device.ensureBuvid();
     final parsed = _parseCookie(cookieHeader);
     if (!parsed.containsKey('SESSDATA') || parsed['SESSDATA']!.isEmpty) {
       return false;
@@ -172,7 +171,7 @@ class VideoRepository {
 
   Future<List<VideoInfo>> _getRcmdVideos({int batch = 5}) async {
     try {
-      await client.ensureBuvid();
+      await client.device.ensureBuvid();
       final all = <VideoInfo>[];
       for (var b = 0; b < batch && all.length < 60; b++) {
         final resp = await dio.get('/x/web-interface/index/top/rcmd', queryParameters: {'fresh_type': 3, 'fresh_idx': b}, options: Options(headers: client.auth.requestHeaders()));
@@ -477,8 +476,7 @@ class VideoRepository {
   Future<List<SearchUser>> searchUsers(String keyword) async {
     if (keyword.trim().isEmpty) return [];
     try {
-      await client.ensureBuvid();
-      final mixinKey = await client.getMixinKey();
+      await client.device.ensureBuvid();
       final params = <String, dynamic>{
         'search_type': 'bili_user',
         'keyword': keyword,
@@ -487,10 +485,10 @@ class VideoRepository {
         'platform': 'pc',
         'web_location': 1430654,
       };
-      WbiSign.sign(params, mixinKey);
+      final signed = await client.wbi.sign(params);
       final enc = Uri.encodeComponent(keyword);
       final resp = await dio.get('/x/web-interface/wbi/search/type',
-        queryParameters: params,
+        queryParameters: signed,
         options: Options(headers: client.auth.requestHeaders(extra: {
           'origin': 'https://search.bilibili.com',
           'referer': 'https://search.bilibili.com/bili_user?keyword=$enc',
