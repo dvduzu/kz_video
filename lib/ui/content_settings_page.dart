@@ -69,6 +69,23 @@ class _ContentSettingsPageState extends State<ContentSettingsPage> {
     return changed;
   }
 
+  void _pickHomeRid() {
+    showModalBottomSheet(context: context, showDragHandle: true, builder: (ctx) => Column(mainAxisSize: MainAxisSize.min, children: [
+      const Padding(padding: EdgeInsets.all(16), child: Text('选择启动主页分区', style: TextStyle(fontWeight: FontWeight.bold))),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: Wrap(spacing: 8, children: _rids.entries.map((e) => ChoiceChip(
+          label: Text(e.value),
+          selected: _homeRid == e.key,
+          onSelected: (_) {
+            setState(() => _homeRid = e.key);
+            Navigator.pop(ctx);
+          },
+        )).toList()),
+      ),
+    ]));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -76,21 +93,13 @@ class _ContentSettingsPageState extends State<ContentSettingsPage> {
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         children: [
-          const Text('分区', style: TextStyle(fontWeight: FontWeight.bold)),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 2),
-            child: Text('按分区排行拉取，非本地过滤', style: TextStyle(fontSize: 12, color: Colors.grey)),
-          ),
-          Wrap(spacing: 8, children: _rids.entries.map((e) => ChoiceChip(
-            label: Text(e.value),
-            selected: _rid == e.key,
-            onSelected: (_) => setState(() => _rid = e.key),
-          )).toList()),
-          SwitchListTile(
-            title: const Text('设为启动主页'),
-            subtitle: const Text('启动时默认进入当前分区'),
-            value: _rid == _homeRid,
-            onChanged: (v) => setState(() => _homeRid = v ? _rid : ''),
+          const Text('推荐设置', style: TextStyle(fontWeight: FontWeight.bold)),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('启动主页分区'),
+            subtitle: Text('启动时默认进入：${_rids[_homeRid] ?? '全部'}'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: _pickHomeRid,
           ),
           const SizedBox(height: 16),
           const Text('长视频阈值', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -127,6 +136,7 @@ class _ContentSettingsPageState extends State<ContentSettingsPage> {
               ],
             ),
           const Divider(height: 24),
+          const Text('内容管理', style: TextStyle(fontWeight: FontWeight.bold)),
           ListTile(
             leading: const Icon(Icons.person_add_alt),
             title: const Text('订阅管理'),

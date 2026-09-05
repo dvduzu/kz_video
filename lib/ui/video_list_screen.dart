@@ -117,6 +117,35 @@ class VideoListScreenState extends State<VideoListScreen> {
     }[key] ?? '全部';
   }
 
+  void _pickRid() {
+    final cur = widget.repo.settings.rid;
+    showModalBottomSheet(context: context, showDragHandle: true, builder: (ctx) => StatefulBuilder(builder: (ctx, setSheet) => Column(mainAxisSize: MainAxisSize.min, children: [
+      const Padding(padding: EdgeInsets.all(16), child: Text('选择分区', style: TextStyle(fontWeight: FontWeight.bold))),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: Wrap(spacing: 8, children: const {
+          '': '全部',
+          'tech': '科技',
+          'edu': '知识',
+          'life': '美食',
+          'game': '游戏',
+          'ent': '娱乐',
+          'music': '音乐',
+          'sub': '订阅',
+        }.entries.map((e) => Builder(builder: (ctx) => ChoiceChip(
+          label: Text(e.value),
+          selected: cur == e.key,
+          onSelected: (_) {
+            setSheet(() {});
+            Navigator.pop(ctx);
+            widget.repo.settings.setRid(e.key);
+            _load(force: false);
+          },
+        ))).toList()),
+      ),
+    ])));
+  }
+
   String _today() {
     final now = DateTime.now();
     return '${now.month}月${now.day}日';
@@ -140,10 +169,21 @@ class VideoListScreenState extends State<VideoListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: GestureDetector(
-          onTap: editing ? null : _onTitleTap,
-          child: Text(editing ? '已选择 ${selected.length} 项' : '${_ridName(widget.repo.settings.rid)} · ${_today()}'),
-        ),
+        title: editing
+            ? Text('已选择 ${selected.length} 项')
+            : Row(mainAxisSize: MainAxisSize.min, children: [
+                GestureDetector(
+                  onTap: _pickRid,
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Text(_ridName(widget.repo.settings.rid), style: const TextStyle(fontWeight: FontWeight.bold)),
+                    const Icon(Icons.arrow_drop_down, size: 20),
+                  ]),
+                ),
+                GestureDetector(
+                  onTap: _onTitleTap,
+                  child: Text(' · ${_today()}'),
+                ),
+              ]),
         leading: editing
             ? IconButton(icon: const Icon(Icons.close), onPressed: _exitEditing)
             : null,
