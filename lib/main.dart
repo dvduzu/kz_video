@@ -40,7 +40,8 @@ SnackBarThemeData _snackBarTheme(Brightness brightness, Color seed) {
 
 class _MyAppState extends State<MyApp> {
   ThemeMode mode = ThemeMode.system;
-  Color? seed;
+  SeedTheme? theme;
+  bool useDynamic = false;
 
   @override
   void initState() {
@@ -48,35 +49,38 @@ class _MyAppState extends State<MyApp> {
     _load();
   }
 
-  Future<void> _load() async {
+  void _load() {
     final s = widget.repo.settings;
-    final modeStr = s.themeMode;
-    final seedStr = s.themeSeed;
     setState(() {
-      mode = switch (modeStr) { 'light' => ThemeMode.light, 'dark' => ThemeMode.dark, _ => ThemeMode.system };
-      seed = seedStr.isEmpty ? null : (aospSeeds[seedStr] ?? const Color(0xFF6750A4));
+      mode = switch (s.themeMode) { 'light' => ThemeMode.light, 'dark' => ThemeMode.dark, _ => ThemeMode.system };
+      theme = seedThemeForKey(s.themeSeed);
+      useDynamic = s.dynamicColor;
     });
   }
 
-  Future<void> setTheme(ThemeMode newMode, Color? newSeed) async {
-    setState(() { mode = newMode; seed = newSeed; });
+  Future<void> setTheme(ThemeMode newMode, SeedTheme? newTheme, {bool? dynamic}) async {
+    final next = dynamic ?? useDynamic;
+    setState(() { mode = newMode; theme = newTheme; useDynamic = next; });
     final s = widget.repo.settings;
     await s.setThemeMode(switch (newMode) { ThemeMode.light => 'light', ThemeMode.dark => 'dark', _ => 'system' });
-    final seedName = newSeed == null ? '' : (aospSeeds.entries.firstWhere((e) => e.value == newSeed, orElse: () => const MapEntry('蓝', Color(0xFF6750A4))).key);
-    await s.setThemeSeed(seedName);
+    await s.setDynamicColor(next);
+    if (!next) await s.setThemeSeed(newTheme?.key ?? '');
   }
 
   @override
   Widget build(BuildContext context) {
     return DynamicColorBuilder(builder: (lightDynamic, darkDynamic) {
       final isDark = WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark;
-      final seedColor = seed ?? ((isDark ? darkDynamic : lightDynamic)?.primary ?? const Color(0xFF6750A4));
+      final useDynamic = this.useDynamic && (isDark ? darkDynamic : lightDynamic) != null;
+      final lightCs = useDynamic ? lightDynamic! : theme?.toColorScheme(false) ?? ColorScheme.fromSeed(seedColor: const Color(0xFF6750A4));
+      final darkScheme = darkDynamic ?? lightDynamic;
+      final darkCs = useDynamic ? (darkScheme ?? ColorScheme.fromSeed(seedColor: const Color(0xFF6750A4), brightness: Brightness.dark)) : theme?.toColorScheme(true) ?? ColorScheme.fromSeed(seedColor: const Color(0xFF6750A4), brightness: Brightness.dark);
       return MaterialApp(
         title: 'KzVideo',
-        theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: seedColor), useMaterial3: true, snackBarTheme: _snackBarTheme(Brightness.light, seedColor)),
-        darkTheme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: seedColor, brightness: Brightness.dark), useMaterial3: true, snackBarTheme: _snackBarTheme(Brightness.dark, seedColor)),
+        theme: ThemeData(colorScheme: lightCs, useMaterial3: true, snackBarTheme: _snackBarTheme(Brightness.light, lightCs.primary)),
+        darkTheme: ThemeData(colorScheme: darkCs, useMaterial3: true, snackBarTheme: _snackBarTheme(Brightness.dark, darkCs.primary)),
         themeMode: mode,
-        home: App(repo: widget.repo, mode: mode, onToggleTheme: toggle, seed: seed, onSetTheme: setTheme),
+        home: App(repo: widget.repo, mode: mode, onToggleTheme: toggle, theme: theme, useDynamic: useDynamic, onSetTheme: setTheme),
       );
     });
   }
@@ -84,7 +88,7 @@ class _MyAppState extends State<MyApp> {
   void toggle() {
     final brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
     final isDark = mode == ThemeMode.dark || (mode == ThemeMode.system && brightness == Brightness.dark);
-    setTheme(isDark ? ThemeMode.light : ThemeMode.dark, seed);
+    setTheme(isDark ? ThemeMode.light : ThemeMode.dark, theme);
   }
 }
 
@@ -92,9 +96,10 @@ class App extends StatefulWidget {
   final VideoRepository repo;
   final ThemeMode mode;
   final VoidCallback onToggleTheme;
-  final Color? seed;
-  final Future<void> Function(ThemeMode, Color?) onSetTheme;
-  const App({super.key, required this.repo, required this.mode, required this.onToggleTheme, required this.seed, required this.onSetTheme});
+  final SeedTheme? theme;
+  final bool useDynamic;
+  final Future<void> Function(ThemeMode, SeedTheme?, {bool? dynamic}) onSetTheme;
+  const App({super.key, required this.repo, required this.mode, required this.onToggleTheme, required this.theme, required this.useDynamic, required this.onSetTheme});
 
   @override
   State<App> createState() => _AppState();
@@ -108,7 +113,7 @@ class _AppState extends State<App> {
   Widget build(BuildContext context) {
     final video = playing;
     return Stack(children: [
-      VideoListScreen(key: _listKey, repo: widget.repo, mode: widget.mode, onToggleTheme: widget.onToggleTheme, seed: widget.seed, onSetTheme: widget.onSetTheme, onPlay: (v) => setState(() => playing = v)),
+      VideoListScreen(key: _listKey, repo: widget.repo, mode: widget.mode, onToggleTheme: widget.onToggleTheme, seed: widget.theme, useDynamic: widget.useDynamic, onSetTheme: widget.onSetTheme, onPlay: (v) => setState(() => playing = v)),
       if (video != null)
         PlayerScreen(repo: widget.repo, video: video, onBack: () => setState(() => playing = null), onWatched: (v) => _listKey.currentState?.markWatched(v)),
     ]);

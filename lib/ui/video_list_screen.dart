@@ -13,9 +13,10 @@ class VideoListScreen extends StatefulWidget {
   final void Function(VideoInfo) onPlay;
   final ThemeMode mode;
   final VoidCallback onToggleTheme;
-  final Color? seed;
-  final Future<void> Function(ThemeMode, Color?) onSetTheme;
-  const VideoListScreen({super.key, required this.repo, required this.onPlay, required this.mode, required this.onToggleTheme, required this.seed, required this.onSetTheme});
+  final SeedTheme? seed;
+  final bool useDynamic;
+  final Future<void> Function(ThemeMode, SeedTheme?, {bool? dynamic}) onSetTheme;
+  const VideoListScreen({super.key, required this.repo, required this.onPlay, required this.mode, required this.onToggleTheme, required this.seed, required this.useDynamic, required this.onSetTheme});
 
   @override
   State<VideoListScreen> createState() => VideoListScreenState();
@@ -30,6 +31,15 @@ class VideoListScreenState extends State<VideoListScreen> {
   final Set<String> _watched = {};
   final Set<String> _fading = {};
   final Set<String> selected = {};
+
+  bool get _cardOutlineEnabled => widget.repo.settings.cardOutline;
+
+  Color get _cardColor => switch (widget.repo.settings.cardTone) {
+    'low' => Theme.of(context).colorScheme.surfaceContainerLow,
+    'medium' => Theme.of(context).colorScheme.surfaceContainer,
+    'highest' => Theme.of(context).colorScheme.surfaceContainerHighest,
+    _ => Theme.of(context).colorScheme.surfaceContainerHigh,
+  };
 
   void markWatched(VideoInfo v) => _markWatched(v);
 
@@ -46,8 +56,7 @@ class VideoListScreenState extends State<VideoListScreen> {
       _watched.add(v.bvid);
     });
     Future<void>.delayed(const Duration(milliseconds: 400), () {
-      if (!mounted) return;
-      setState(() {
+      if (!mounted) return;      setState(() {
         videos?.removeWhere((x) => x.bvid == v.bvid);
         _fading.remove(v.bvid);
       });
@@ -323,8 +332,18 @@ class VideoListScreenState extends State<VideoListScreen> {
               elevation: 0,
               color: isSelected
                   ? Theme.of(context).colorScheme.primaryContainer
-                  : Theme.of(context).colorScheme.surfaceContainerLow,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  : _cardColor,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: _cardOutlineEnabled
+                    ? BorderSide(
+                        color: isSelected
+                            ? Theme.of(context).colorScheme.primary
+                            : Theme.of(context).colorScheme.outlineVariant,
+                        width: isSelected ? 1.5 : 1,
+                      )
+                    : BorderSide.none,
+              ),
               child: InkWell(
                 onTap: () {
                   if (editing) {
@@ -479,7 +498,8 @@ class VideoListScreenState extends State<VideoListScreen> {
   void _showColorSettings() {
     Navigator.push(context, MaterialPageRoute(builder: (_) => AppearanceSettingsPage(
       mode: widget.mode,
-      seed: widget.seed,
+      theme: widget.seed,
+      useDynamic: widget.useDynamic,
       onSetTheme: widget.onSetTheme,
     )));
   }
@@ -526,6 +546,9 @@ class VideoListScreenState extends State<VideoListScreen> {
         onOpenColorSettings: _showColorSettings,
         onOpenSubscriptions: _showSubscriptions,
         onOpenBlacklist: _showBlacklist,
+        onAppearanceChanged: () {
+          if (mounted) setState(() {});
+        },
       ),
     ));
     if (!mounted) return;

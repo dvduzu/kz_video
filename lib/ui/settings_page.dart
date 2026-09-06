@@ -7,13 +7,15 @@ import 'package:path_provider/path_provider.dart';
 import '../data/video_repository.dart';
 import 'content_settings_page.dart';
 import 'login_sheet.dart';
+import 'other_settings_page.dart';
 
 class SettingsPage extends StatefulWidget {
   final VideoRepository repo;
   final VoidCallback onOpenColorSettings;
   final VoidCallback onOpenSubscriptions;
   final VoidCallback onOpenBlacklist;
-  const SettingsPage({super.key, required this.repo, required this.onOpenColorSettings, required this.onOpenSubscriptions, required this.onOpenBlacklist});
+  final VoidCallback onAppearanceChanged;
+  const SettingsPage({super.key, required this.repo, required this.onOpenColorSettings, required this.onOpenSubscriptions, required this.onOpenBlacklist, required this.onAppearanceChanged});
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -136,6 +138,13 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  Future<void> _openOther() async {
+    await Navigator.push<bool>(context, MaterialPageRoute(
+      builder: (_) => OtherSettingsPage(repo: widget.repo),
+    ));
+    if (mounted) widget.onAppearanceChanged();
+  }
+
   @override
   Widget build(BuildContext context) {
     final repo = widget.repo;
@@ -166,6 +175,14 @@ class _SettingsPageState extends State<SettingsPage> {
             subtitle: const Text('深浅模式 / 色调'),
             trailing: const Icon(Icons.chevron_right),
             onTap: widget.onOpenColorSettings,
+          ),
+          const Divider(height: 4),
+          ListTile(
+            leading: const Icon(Icons.tune),
+            title: const Text('其他'),
+            subtitle: const Text('视频卡片描边 / 卡片底色层级'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: _openOther,
           ),
           const Divider(height: 4),
           ListTile(

@@ -37,13 +37,19 @@ class LocalStore {
   String get homeRid => _p.getString('setting_home_rid') ?? '';
   String get themeMode => _p.getString('theme_mode') ?? 'system';
   String get themeSeed => _p.getString('theme_seed') ?? '';
+  bool get dynamicColor => _p.getBool('dynamic_color') ?? false;
   Future<void> setThemeMode(String v) => _p.setString('theme_mode', v);
   Future<void> setThemeSeed(String v) => _p.setString('theme_seed', v);
+  Future<void> setDynamicColor(bool v) => _p.setBool('dynamic_color', v);
   bool get rcmdEnabled => _p.getBool('setting_rcmd_enabled') ?? false;
   int get rcmdBatch => _p.getInt('setting_rcmd_batch') ?? 3;
   bool get guestMode => _p.getBool('guest_mode') ?? false;
+  bool get cardOutline => _p.getBool('setting_card_outline') ?? false;
+  String get cardTone => _p.getString('setting_card_tone') ?? 'high';
 
   Future<void> setGuestMode(bool v) => _p.setBool('guest_mode', v);
+  Future<void> setCardOutline(bool v) => _p.setBool('setting_card_outline', v);
+  Future<void> setCardTone(String v) => _p.setString('setting_card_tone', v);
   Future<void> setHistoryEnabled(bool v) => _p.setBool('setting_history', v);
   Future<void> setWatchLaterEnabled(bool v) => _p.setBool('setting_watch_later', v);
   Future<void> setMinDuration(int v) => _p.setInt('setting_min_duration', v);
