@@ -105,4 +105,44 @@ class LocalStore {
     await _p.remove('daily_${ridKey}_$today');
     await _p.remove('daily_ts_${ridKey}_$today');
   }
+
+  Map<String, dynamic> exportData() {
+    return {
+      'version': 1,
+      'settings': {
+        'rid': rid,
+        'homeRid': homeRid,
+        'minDuration': _p.getInt('setting_min_duration') ?? 600,
+        'minDurationSub': _p.getInt('setting_min_duration_sub') ?? 0,
+        'rcmdEnabled': rcmdEnabled,
+        'rcmdBatch': rcmdBatch,
+        'history': isHistoryEnabled,
+        'watchLater': isWatchLaterEnabled,
+        'guestMode': guestMode,
+      },
+      'subscriptions': subscriptions,
+      'blacklist': blacklist,
+    };
+  }
+
+  Future<void> importData(Map<String, dynamic> data) async {
+    final settings = data['settings'] as Map<String, dynamic>?;
+    if (settings != null) {
+      if (settings['rid'] is String) await setRid(settings['rid'] as String);
+      if (settings['homeRid'] is String) await setHomeRid(settings['homeRid'] as String);
+      if (settings['minDuration'] is int) await setMinDuration(settings['minDuration'] as int);
+      if (settings['minDurationSub'] is int) await setMinDurationOf('sub', settings['minDurationSub'] as int);
+      if (settings['rcmdEnabled'] is bool) await setRcmdEnabled(settings['rcmdEnabled'] as bool);
+      if (settings['rcmdBatch'] is int) await setRcmdBatch(settings['rcmdBatch'] as int);
+      if (settings['history'] is bool) await setHistoryEnabled(settings['history'] as bool);
+      if (settings['watchLater'] is bool) await setWatchLaterEnabled(settings['watchLater'] as bool);
+      if (settings['guestMode'] is bool) await setGuestMode(settings['guestMode'] as bool);
+    }
+    if (data['subscriptions'] is List) {
+      await _writeList(_subscriptions, (data['subscriptions'] as List).whereType<Map<String, dynamic>>().toList());
+    }
+    if (data['blacklist'] is List) {
+      await _writeList(_blacklist, (data['blacklist'] as List).whereType<Map<String, dynamic>>().toList());
+    }
+  }
 }

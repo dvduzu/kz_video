@@ -183,6 +183,14 @@ class VideoRepository {
 
   Future<void> clearDailyCache() => store.clearAllDailyCache();
 
+  Map<String, dynamic> exportData() => store.exportData();
+
+  Future<void> importData(Map<String, dynamic> data) async {
+    await store.importData(data);
+    await client.auth.setGuestMode(store.guestMode);
+    await store.clearAllDailyCache();
+  }
+
   static String _today() {
     final now = DateTime.now();
     return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';

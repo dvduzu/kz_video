@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../data/video_repository.dart';
 import 'content_settings_page.dart';
@@ -44,6 +46,43 @@ class _SettingsPageState extends State<SettingsPage> {
     });
   }
 
+  void _showImportExport() {
+    final data = jsonEncode(widget.repo.exportData());
+    final ctl = TextEditingController();
+    showDialog(context: context, builder: (ctx) => AlertDialog(
+      title: const Text('导入 / 导出'),
+      content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        TextField(
+          controller: ctl,
+          maxLines: 6,
+          decoration: const InputDecoration(hintText: '粘贴导出的数据以导入', border: OutlineInputBorder()),
+        ),
+        const SizedBox(height: 8),
+        Text('当前可导出：\n$data', style: const TextStyle(fontSize: 11)),
+      ])),
+      actions: [
+        TextButton(onPressed: () {
+          Clipboard.setData(ClipboardData(text: data));
+          if (ctx.mounted) Navigator.pop(ctx);
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已复制导出数据')));
+        }, child: const Text('复制导出数据')),
+        FilledButton(onPressed: () async {
+          try {
+            final decoded = jsonDecode(ctl.text.trim());
+            if (decoded is! Map<String, dynamic>) throw const FormatException('格式错误');
+            await widget.repo.importData(decoded);
+            if (ctx.mounted) Navigator.pop(ctx);
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('导入成功')));
+          } catch (_) {
+            if (ctx.mounted) Navigator.pop(ctx);
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('导入失败：数据格式无效')));
+          }
+        }, child: const Text('导入')),
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+      ],
+    ));
+  }
+
   Future<void> _openContent() async {
     final changed = await Navigator.push<bool>(context, MaterialPageRoute(
       builder: (_) => ContentSettingsPage(
@@ -71,6 +110,14 @@ class _SettingsPageState extends State<SettingsPage> {
             subtitle: const Text('分区 / 个性化 / 历史 / 书签 / 订阅 / 黑名单'),
             trailing: const Icon(Icons.chevron_right),
             onTap: _openContent,
+          ),
+          const Divider(height: 4),
+          ListTile(
+            leading: const Icon(Icons.sync_alt),
+            title: const Text('导入 / 导出'),
+            subtitle: const Text('设置 / 订阅 / 黑名单'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: _showImportExport,
           ),
           const Divider(height: 4),
           ListTile(
