@@ -63,20 +63,18 @@ class _ContentSettingsPageState extends State<ContentSettingsPage> {
   }
 
   void _pickHomeRid() {
-    showModalBottomSheet(context: context, showDragHandle: true, builder: (ctx) => Column(mainAxisSize: MainAxisSize.min, children: [
-      const Padding(padding: EdgeInsets.all(16), child: Text('选择启动主页分区', style: TextStyle(fontWeight: FontWeight.bold))),
-      Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        child: Wrap(spacing: 8, children: _rids.entries.map((e) => ChoiceChip(
-          label: Text(e.value),
-          selected: _homeRid == e.key,
-          onSelected: (_) {
-            setState(() => _homeRid = e.key);
-            Navigator.pop(ctx);
-          },
-        )).toList()),
-      ),
-    ]));
+    showDialog(context: context, builder: (ctx) => AlertDialog(
+      title: const Text('选择启动主页分区'),
+      content: Wrap(spacing: 8, children: _rids.entries.map((e) => ChoiceChip(
+        label: Text(e.value),
+        selected: _homeRid == e.key,
+        onSelected: (_) {
+          setState(() => _homeRid = e.key);
+          Navigator.pop(ctx);
+        },
+      )).toList()),
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消'))],
+    ));
   }
 
   @override

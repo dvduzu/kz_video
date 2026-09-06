@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider/path_provider.dart';
 import '../data/video_repository.dart';
 import 'content_settings_page.dart';
 import 'login_sheet.dart';
@@ -54,11 +56,11 @@ class _SettingsPageState extends State<SettingsPage> {
       content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
         TextField(
           controller: ctl,
-          maxLines: 6,
+          maxLines: 4,
           decoration: const InputDecoration(hintText: '粘贴导出的数据以导入', border: OutlineInputBorder()),
         ),
         const SizedBox(height: 8),
-        Text('当前可导出：\n$data', style: const TextStyle(fontSize: 11)),
+        const Text('支持复制/粘贴，或导出/导入到文件', style: TextStyle(fontSize: 11, color: Colors.grey)),
       ])),
       actions: [
         TextButton(onPressed: () {
@@ -66,6 +68,44 @@ class _SettingsPageState extends State<SettingsPage> {
           if (ctx.mounted) Navigator.pop(ctx);
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已复制导出数据')));
         }, child: const Text('复制导出数据')),
+        TextButton(onPressed: () async {
+          final dir = await getApplicationDocumentsDirectory();
+          final file = File('${dir.path}/kzv_backup.json');
+          await file.writeAsString(data);
+          if (ctx.mounted) Navigator.pop(ctx);
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已导出到 ${file.path}')));
+        }, child: const Text('导出到文件')),
+        TextButton(onPressed: () async {
+          final dir = await getApplicationDocumentsDirectory();
+          final files = dir.listSync().where((e) => e.path.endsWith('.json')).toList();
+          if (files.isEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('没有可导入的文件')));
+            return;
+          }
+          if (ctx.mounted) Navigator.pop(ctx);
+          showDialog(context: context, builder: (ctx) => AlertDialog(
+            title: const Text('选择要导入的文件'),
+            content: SizedBox(width: double.maxFinite, child: ListView(
+              shrinkWrap: true,
+              children: files.map((f) => ListTile(
+                title: Text(f.uri.pathSegments.last),
+                onTap: () async {
+                  try {
+                    final content = await File(f.path).readAsString();
+                    final decoded = jsonDecode(content);
+                    if (decoded is! Map<String, dynamic>) throw const FormatException('格式错误');
+                    await widget.repo.importData(decoded);
+                    if (ctx.mounted) Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('导入成功')));
+                  } catch (_) {
+                    if (ctx.mounted) Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('导入失败：数据格式无效')));
+                  }
+                },
+              )).toList(),
+            )),
+          ));
+        }, child: const Text('从文件导入')),
         FilledButton(onPressed: () async {
           try {
             final decoded = jsonDecode(ctl.text.trim());

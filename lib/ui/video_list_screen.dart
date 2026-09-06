@@ -120,11 +120,10 @@ class VideoListScreenState extends State<VideoListScreen> {
   void _pickRid() {
     var selRid = widget.repo.settings.rid;
     var selMin = widget.repo.settings.minDurationOf(selRid);
-    showModalBottomSheet(context: context, showDragHandle: true, builder: (ctx) => StatefulBuilder(builder: (ctx, setSheet) => Column(mainAxisSize: MainAxisSize.min, children: [
-      const Padding(padding: EdgeInsets.all(16), child: Text('分区设置', style: TextStyle(fontWeight: FontWeight.bold))),
-      Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: Wrap(spacing: 8, children: const {
+    showDialog(context: context, builder: (ctx) => StatefulBuilder(builder: (ctx, setSheet) => AlertDialog(
+      title: const Text('分区设置'),
+      content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Wrap(spacing: 8, children: const {
           '': '全部',
           'tech': '科技',
           'edu': '知识',
@@ -143,12 +142,8 @@ class VideoListScreenState extends State<VideoListScreen> {
             });
           },
         ))).toList()),
-      ),
       const Divider(height: 16),
-      Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          if (selRid == 'sub') ...[
+      if (selRid == 'sub') ...[
             Row(children: [
               const Text('长视频时长'),
               const SizedBox(width: 8),
@@ -176,12 +171,9 @@ class VideoListScreenState extends State<VideoListScreen> {
               )),
               Text('${(selMin / 60).round()} 分钟'),
             ]),
-        ]),
-      ),
-      const SizedBox(height: 8),
-      Padding(
-        padding: const EdgeInsets.all(16),
-        child: SizedBox(width: double.infinity, child: FilledButton(
+      ]),
+      actions: [
+        FilledButton(
           onPressed: () {
             widget.repo.settings.setRid(selRid);
             widget.repo.settings.setMinDurationOf(selRid, selMin);
@@ -190,9 +182,10 @@ class VideoListScreenState extends State<VideoListScreen> {
             _load(force: true);
           },
           child: const Text('应用'),
-        )),
-      ),
-    ])));
+        ),
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+      ],
+    )));
   }
 
   int _minToSubIndex(int min) {
