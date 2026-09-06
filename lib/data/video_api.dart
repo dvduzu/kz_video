@@ -19,7 +19,7 @@ class VideoApi {
   Future<String> getPlayUrl(String bvid, {int? qn}) async {
     final viewData = await _wbiGet('/x/web-interface/view', {'bvid': bvid});
     final cid = viewData['data']?['cid'];
-    if (cid == null) throw Exception('获取视频信息失败');
+    if (cid == null) throw const BilibiliApiException('获取视频信息失败', path: '/x/web-interface/view');
     final requested = qn != null ? [qn] : [80, 64, 32];
     final errors = <String>[];
     for (final q in requested) {
@@ -46,7 +46,7 @@ class VideoApi {
         }
       }
     }
-    throw Exception('获取播放地址失败（无可用 durl）：${errors.join(' | ')}');
+    throw BilibiliApiException('获取播放地址失败（无可用 durl）：${errors.join(' | ')}', path: '/x/player/wbi/playurl');
   }
 
   Map<String, dynamic> _dmImgParams() {

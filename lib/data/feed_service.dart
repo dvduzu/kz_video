@@ -90,7 +90,9 @@ class FeedService {
       try {
         final data = await client.wbiGet('/x/web-interface/popular', {'pn': pn, 'ps': 30});
         all.addAll(_parseVideoList(data['data']?['list'] as List? ?? []));
-      } catch (_) {}
+      } catch (e) {
+        KzvLogger.debug('popular pn=$pn failed: $e');
+      }
     }
     return all;
   }
@@ -99,7 +101,8 @@ class FeedService {
     try {
       final data = await client.wbiGet('/x/web-interface/ranking/v2', {'rid': ridMain, 'type': 'all'});
       return _parseVideoList(data['data']?['list'] as List? ?? []);
-    } catch (_) {
+    } catch (e) {
+      KzvLogger.debug('ranking rid=$ridMain failed: $e');
       return [];
     }
   }
@@ -156,11 +159,7 @@ class FeedService {
         }
       }
     }
-    final List<VideoInfo> popular = [];
-    for (var attempt = 0; attempt < 3 && popular.isEmpty; attempt++) {
-      popular.addAll(ridMain == 0 ? await _fetchPopular() : await _fetchRanking(ridMain));
-      if (popular.isEmpty) await Future<void>.delayed(Duration(milliseconds: 600 * (attempt + 1)));
-    }
+    final List<VideoInfo> popular = ridMain == 0 ? await _fetchPopular() : await _fetchRanking(ridMain);
     if (ridKey == 'sub') {
       final subVideos = await _fetchSubVideos(ridMain);
       final subFiltered = subVideos.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid) && !watched.contains(v.bvid)).toList()
