@@ -12,9 +12,10 @@ class BilibiliDevice {
   BilibiliDevice(this.dio, this.auth);
 
   bool _buvidReady = false;
-  bool _buvidActivated = false;
+  String? _activatedBuvid3;
   bool _biliTicketOk = false;
   int _biliTicketExpires = 0;
+  Future<void>? _initializing;
 
   String _hmacSha256(String key, String message) => Hmac(sha256, utf8.encode(key)).convert(utf8.encode(message)).toString();
 
@@ -25,22 +26,25 @@ class BilibiliDevice {
   }
 
   String _genUuid() {
-    const map = ['1','2','3','4','5','6','7','8','9','A','B','C','D','E','F','10'];
+    const hex = '0123456789abcdef';
     final r = Random();
     final sb = StringBuffer();
-    final idx = [9,13,17,21];
+    const idx = {9, 13, 17, 21};
     for (var i = 0; i < 32; i++) {
       if (idx.contains(i)) sb.write('-');
-      sb.write(map[r.nextInt(16)]);
+      sb.write(hex[r.nextInt(16)]);
     }
     sb.write('${(DateTime.now().millisecondsSinceEpoch % 100000).toString().padLeft(5, '0')}infoc');
     return sb.toString();
   }
 
-  Future<void> ensureBuvid() async {
+  Future<void> ensureBuvid() {
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    if (_buvidReady && _biliTicketOk && now < _biliTicketExpires) return;
-    _buvidReady = false;
+    if (_buvidReady && _biliTicketOk && now < _biliTicketExpires) return Future.value();
+    return _initializing ??= (_buvidReady ? _ensureTicket() : _doEnsureBuvid()).whenComplete(() => _initializing = null);
+  }
+
+  Future<void> _doEnsureBuvid() async {
     final savedLogin = <String, String>{};
     final full = auth.fullCookies;
     if (full != null) {
@@ -63,34 +67,46 @@ class BilibiliDevice {
         '_uuid': _genUuid(),
         'buvid_fp': _hex(16),
       };
-      final hexSign = _hmacSha256('XgwSnGZ1p', 'ts$ts');
-      try {
-        final tick = await dio.post(
-          'https://api.bilibili.com/bapis/bilibili.api.ticket.v1.Ticket/GenWebTicket',
-          queryParameters: {'key_id': 'ec02', 'hexsign': hexSign, 'context[ts]': '$ts', 'csrf': ''},
-        );
-        final td = (tick.data as Map<String, dynamic>)['data'] as Map<String, dynamic>?;
-        final t = td?['ticket'] as String?;
-        if (t != null && t.isNotEmpty) {
-          cookies['bili_ticket'] = t;
-          final created = (td?['created_at'] as int?) ?? ts;
-          final ttl = (td?['ttl'] as int?) ?? 1800;
-          _biliTicketExpires = created + ttl;
-          _biliTicketOk = true;
-        }
-      } catch (e) {
-        KzvLogger.debug('bili_ticket failed: $e');
-      }
       cookies.addAll(savedLogin);
       auth.setFullCookies(cookies);
       _buvidReady = true;
-      if (!_buvidActivated) {
-        _buvidActivated = true;
+      if (_activatedBuvid3 != b3) {
+        _activatedBuvid3 = b3;
         await _activateBuvid();
       }
       KzvLogger.debug('buvid ready (${cookies.length} cookies)');
     } catch (e) {
+      _buvidReady = false;
       KzvLogger.debug('ensureBuvid failed: $e');
+      return;
+    }
+    await _ensureTicket();
+  }
+
+  Future<void> _ensureTicket() async {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    if (_biliTicketOk && now < _biliTicketExpires) return;
+    final full = auth.fullCookies;
+    if (full == null) return;
+    final ts = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final hexSign = _hmacSha256('XgwSnGZ1p', 'ts$ts');
+    try {
+      final tick = await dio.post(
+        'https://api.bilibili.com/bapis/bilibili.api.ticket.v1.Ticket/GenWebTicket',
+        queryParameters: {'key_id': 'ec02', 'hexsign': hexSign, 'context[ts]': '$ts', 'csrf': ''},
+      );
+      final td = (tick.data as Map<String, dynamic>)['data'] as Map<String, dynamic>?;
+      final t = td?['ticket'] as String?;
+      if (t != null && t.isNotEmpty) {
+        full['bili_ticket'] = t;
+        auth.setFullCookies(full);
+        final created = (td?['created_at'] as int?) ?? ts;
+        final ttl = (td?['ttl'] as int?) ?? 1800;
+        _biliTicketExpires = created + ttl;
+        _biliTicketOk = true;
+      }
+    } catch (e) {
+      KzvLogger.debug('bili_ticket failed: $e');
     }
   }
 
