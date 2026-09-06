@@ -61,14 +61,14 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
           const Text('颜色组合', style: TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           SizedBox(
-            height: 88,
+            height: 72,
             child: PageView(
               controller: _pageCtrl,
               onPageChanged: (i) => setState(() => _currentPage = i),
               children: _pages.map((ps) => Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: ps.map((t) => Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 5),
                   child: _ColorSwatch(
                     theme: t,
                     selected: !dynamicOn && theme?.key == t.key,
@@ -170,39 +170,39 @@ class _ColorSwatch extends StatelessWidget {
       message: theme.key,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
+        customBorder: const CircleBorder(),
         child: Container(
-          width: 80,
-          height: 80,
-          decoration: BoxDecoration(color: cs.surfaceContainer, borderRadius: BorderRadius.circular(16)),
-          child: Center(
-            child: SizedBox(
-              width: 48,
-              height: 48,
-              child: Stack(alignment: Alignment.center, children: [
-                DecoratedBox(
-                  decoration: BoxDecoration(shape: BoxShape.circle, color: trio[0]),
-                ),
-                Positioned(left: 0, bottom: 0, child: Container(width: 24, height: 24, color: trio[1])),
-                Positioned(right: 0, bottom: 0, child: Container(width: 24, height: 24, color: trio[2])),
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 250),
-                  curve: Curves.easeOut,
-                  width: selected ? 28 : 0,
-                  height: selected ? 28 : 0,
-                  decoration: BoxDecoration(shape: BoxShape.circle, color: cs.primaryContainer),
-                  child: AnimatedScale(
-                    scale: selected ? 1 : 0,
-                    duration: const Duration(milliseconds: 250),
-                    curve: Curves.easeOut,
-                    child: Icon(Icons.check, size: 16, color: cs.onPrimaryContainer),
-                  ),
-                ),
-              ]),
+          width: 64,
+          height: 64,
+          padding: const EdgeInsets.all(2),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: selected ? Border.all(color: cs.primary, width: 3) : null,
+          ),
+          child: ClipOval(
+            child: CustomPaint(
+              size: const Size(60, 60),
+              painter: _ColorWheelPainter(colors: trio),
             ),
           ),
         ),
       ),
     );
   }
+}
+
+class _ColorWheelPainter extends CustomPainter {
+  final List<Color> colors;
+  _ColorWheelPainter({required this.colors});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    canvas.drawArc(rect, -3.14159, 3.14159, true, Paint()..color = colors[0]);
+    canvas.drawArc(rect, 0, 1.5708, true, Paint()..color = colors[1]);
+    canvas.drawArc(rect, 1.5708, 1.5708, true, Paint()..color = colors[2]);
+  }
+
+  @override
+  bool shouldRepaint(covariant _ColorWheelPainter oldDelegate) => oldDelegate.colors != colors;
 }
