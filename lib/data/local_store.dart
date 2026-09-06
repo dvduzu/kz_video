@@ -94,4 +94,11 @@ class LocalStore {
       await _p.remove(k);
     }
   }
+
+  Future<void> clearDailyCacheFor(String ridKey) async {
+    final now = DateTime.now();
+    final today = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    await _p.remove('daily_${ridKey}_$today');
+    await _p.remove('daily_ts_${ridKey}_$today');
+  }
 }

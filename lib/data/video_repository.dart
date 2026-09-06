@@ -146,6 +146,7 @@ class VideoRepository {
     if (list.length >= LocalStore.maxSubscriptions) return false;
     list.add({'mid': mid, 'name': name, 'face': face});
     await store.setSubscriptions(list);
+    await store.clearDailyCacheFor('sub');
     return true;
   }
 
@@ -163,6 +164,7 @@ class VideoRepository {
     final list = store.subscriptions;
     list.removeWhere((e) => e['mid'] == mid);
     await store.setSubscriptions(list);
+    await store.clearDailyCacheFor('sub');
   }
 
   Future<void> markWatched(String bvid) async {

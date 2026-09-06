@@ -13,7 +13,7 @@ void main() async {
   MediaKit.ensureInitialized();
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   final repo = await VideoRepository.create();
-  repo.restoreLogin();
+  await repo.restoreLogin();
   final homeRid = repo.settings.homeRid;
   if (homeRid != repo.settings.rid) {
     await repo.settings.setRid(homeRid);

@@ -124,19 +124,19 @@ class FeedService {
     final key = 'daily_${ridKey}_$today';
     final tsKey = 'daily_ts_${ridKey}_$today';
     final now = DateTime.now().millisecondsSinceEpoch;
+    final blacklist = await _getBlacklistSet();
+    final watched = store.watched.toSet();
     if (!force) {
       final cachedTs = store.getDailyTs(tsKey);
       final cached = store.getDailyCache(key);
       if (cached != null && cachedTs != null && (now - cachedTs) < cacheValidMs) {
         try {
-          final watched = store.watched.toSet();
-          final list = (jsonDecode(cached) as List).map((e) => VideoInfo.fromJson(e as Map<String, dynamic>)).where((v) => !watched.contains(v.bvid)).toList();
+          final list = (jsonDecode(cached) as List).map((e) => VideoInfo.fromJson(e as Map<String, dynamic>))
+            .where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid) && !watched.contains(v.bvid)).toList();
           if (list.isNotEmpty) return list;
         } catch (_) {}
       }
     }
-    final blacklist = await _getBlacklistSet();
-    final watched = store.watched.toSet();
     if (ridKey != 'sub') {
       final rcmdOn = store.rcmdEnabled;
       if (rcmdOn && ridKey == '') {
@@ -161,8 +161,8 @@ class FeedService {
       popular.addAll(ridMain == 0 ? await _fetchPopular() : await _fetchRanking(ridMain));
       if (popular.isEmpty) await Future<void>.delayed(Duration(milliseconds: 600 * (attempt + 1)));
     }
-    final subVideos = await _fetchSubVideos(ridMain);
     if (ridKey == 'sub') {
+      final subVideos = await _fetchSubVideos(ridMain);
       final subFiltered = subVideos.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid) && !watched.contains(v.bvid)).toList()
         ..sort((a, b) => b.pubdate.compareTo(a.pubdate));
       final picked = subFiltered.take(popularPickLimit).toList()..shuffle(Random());
