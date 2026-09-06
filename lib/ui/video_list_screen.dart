@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/models.dart';
 import '../data/local_store.dart';
 import '../data/video_repository.dart';
+import 'appearance_settings_page.dart';
 import 'settings_page.dart';
 import 'subscription_sheet.dart';
 import '../core/logger.dart';
@@ -476,36 +477,10 @@ class VideoListScreenState extends State<VideoListScreen> {
   }
 
   void _showColorSettings() {
-    showDialog(context: context, builder: (ctx) => StatefulBuilder(builder: (ctx, setDlg) => AlertDialog(
-      title: const Text('颜色设置'),
-      content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('深浅模式', style: TextStyle(fontWeight: FontWeight.bold)),
-        Wrap(spacing: 8, children: {
-          ThemeMode.system: '跟随系统',
-          ThemeMode.light: '浅色',
-          ThemeMode.dark: '深色',
-        }.entries.map((e) => ChoiceChip(
-          label: Text(e.value),
-          selected: widget.mode == e.key,
-          onSelected: (_) { setDlg(() {}); widget.onSetTheme(e.key, widget.seed); },
-        )).toList()),
-        const SizedBox(height: 16),
-        const Text('色调', style: TextStyle(fontWeight: FontWeight.bold)),
-        Wrap(spacing: 8, children: [
-          ChoiceChip(
-            avatar: const Icon(Icons.brightness_auto, size: 16),
-            label: const Text('跟随系统'),
-            selected: widget.seed == null,
-            onSelected: (_) { setDlg(() {}); widget.onSetTheme(widget.mode, null); },
-          ),
-          ...aospSeeds.entries.map((e) => ChoiceChip(
-            avatar: CircleAvatar(backgroundColor: e.value, radius: 8),
-            label: Text(e.value == Colors.blueGrey ? '灰' : e.key),
-            selected: widget.seed == e.value,
-            onSelected: (_) { setDlg(() {}); widget.onSetTheme(widget.mode, e.value); },
-          )),
-        ]),
-      ])),
+    Navigator.push(context, MaterialPageRoute(builder: (_) => AppearanceSettingsPage(
+      mode: widget.mode,
+      seed: widget.seed,
+      onSetTheme: widget.onSetTheme,
     )));
   }
 
