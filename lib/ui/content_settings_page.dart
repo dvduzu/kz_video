@@ -12,20 +12,17 @@ class ContentSettingsPage extends StatefulWidget {
 }
 
 class _ContentSettingsPageState extends State<ContentSettingsPage> {
-  late int _minDuration;
   late String _rid;
   late String _homeRid;
   late bool _history;
   late bool _watchLater;
   late bool _rcmdEnabled;
   late int _rcmdBatch;
-  late int _oldMinDuration;
   late String _oldRid;
   late String _oldHomeRid;
   late bool _oldRcmdEnabled;
   late int _oldRcmdBatch;
 
-  static const _durs = {600: '10 分钟', 1200: '20 分钟', 1800: '30 分钟'};
   static const _rids = {'': '全部', 'tech': '科技', 'edu': '知识', 'life': '美食', 'game': '游戏', 'ent': '娱乐', 'music': '音乐', 'sub': '订阅'};
 
   @override
@@ -37,14 +34,12 @@ class _ContentSettingsPageState extends State<ContentSettingsPage> {
   Future<void> _load() async {
     final s = widget.repo.settings;
     setState(() {
-      _minDuration = s.minDuration;
       _rid = s.rid;
       _homeRid = s.homeRid;
       _history = s.isHistoryEnabled;
       _watchLater = s.isWatchLaterEnabled;
       _rcmdEnabled = s.rcmdEnabled;
       _rcmdBatch = s.rcmdBatch;
-      _oldMinDuration = s.minDuration;
       _oldRid = s.rid;
       _oldHomeRid = s.homeRid;
       _oldRcmdEnabled = s.rcmdEnabled;
@@ -57,9 +52,7 @@ class _ContentSettingsPageState extends State<ContentSettingsPage> {
     final changed = _rid != _oldRid ||
         _homeRid != _oldHomeRid ||
         _rcmdEnabled != _oldRcmdEnabled ||
-        _rcmdBatch != _oldRcmdBatch ||
-        _minDuration != _oldMinDuration;
-    await s.setMinDuration(_minDuration);
+        _rcmdBatch != _oldRcmdBatch;
     await s.setRid(_rid);
     await s.setHomeRid(_homeRid);
     await s.setHistoryEnabled(_history);
@@ -101,13 +94,6 @@ class _ContentSettingsPageState extends State<ContentSettingsPage> {
             trailing: const Icon(Icons.chevron_right),
             onTap: _pickHomeRid,
           ),
-          const SizedBox(height: 16),
-          const Text('长视频阈值', style: TextStyle(fontWeight: FontWeight.bold)),
-          Wrap(spacing: 8, children: _durs.entries.map((e) => ChoiceChip(
-            label: Text(e.value),
-            selected: _minDuration == e.key,
-            onSelected: (_) => setState(() => _minDuration = e.key),
-          )).toList()),
           const Divider(height: 24),
           SwitchListTile(
             title: const Text('个性化推荐'),

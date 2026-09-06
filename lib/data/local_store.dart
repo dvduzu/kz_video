@@ -29,6 +29,10 @@ class LocalStore {
   bool get isHistoryEnabled => _p.getBool('setting_history') ?? true;
   bool get isWatchLaterEnabled => _p.getBool('setting_watch_later') ?? true;
   int get minDuration => _p.getInt('setting_min_duration') ?? 600;
+  int minDurationOf(String rid) {
+    if (rid == 'sub') return _p.getInt('setting_min_duration_sub') ?? 0;
+    return _p.getInt('setting_min_duration') ?? 600;
+  }
   String get rid => _p.getString('setting_rid') ?? '';
   String get homeRid => _p.getString('setting_home_rid') ?? '';
   bool get rcmdEnabled => _p.getBool('setting_rcmd_enabled') ?? false;
@@ -39,6 +43,7 @@ class LocalStore {
   Future<void> setHistoryEnabled(bool v) => _p.setBool('setting_history', v);
   Future<void> setWatchLaterEnabled(bool v) => _p.setBool('setting_watch_later', v);
   Future<void> setMinDuration(int v) => _p.setInt('setting_min_duration', v);
+  Future<void> setMinDurationOf(String rid, int v) => _p.setInt(rid == 'sub' ? 'setting_min_duration_sub' : 'setting_min_duration', v);
   Future<void> setRid(String v) => _p.setString('setting_rid', v);
   Future<void> setHomeRid(String v) => _p.setString('setting_home_rid', v);
   Future<void> setRcmdEnabled(bool v) => _p.setBool('setting_rcmd_enabled', v);
@@ -82,4 +87,11 @@ class LocalStore {
 
   List<String> get watched => _p.getStringList('watched') ?? [];
   Future<void> setWatched(List<String> v) => _p.setStringList('watched', v);
+
+  Future<void> clearAllDailyCache() async {
+    final keys = _p.getKeys().where((k) => k.startsWith('daily_')).toList();
+    for (final k in keys) {
+      await _p.remove(k);
+    }
+  }
 }

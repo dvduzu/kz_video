@@ -118,11 +118,12 @@ class VideoListScreenState extends State<VideoListScreen> {
   }
 
   void _pickRid() {
-    final cur = widget.repo.settings.rid;
+    var selRid = widget.repo.settings.rid;
+    var selMin = widget.repo.settings.minDurationOf(selRid);
     showModalBottomSheet(context: context, showDragHandle: true, builder: (ctx) => StatefulBuilder(builder: (ctx, setSheet) => Column(mainAxisSize: MainAxisSize.min, children: [
-      const Padding(padding: EdgeInsets.all(16), child: Text('选择分区', style: TextStyle(fontWeight: FontWeight.bold))),
+      const Padding(padding: EdgeInsets.all(16), child: Text('分区设置', style: TextStyle(fontWeight: FontWeight.bold))),
       Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Wrap(spacing: 8, children: const {
           '': '全部',
           'tech': '科技',
@@ -134,16 +135,75 @@ class VideoListScreenState extends State<VideoListScreen> {
           'sub': '订阅',
         }.entries.map((e) => Builder(builder: (ctx) => ChoiceChip(
           label: Text(e.value),
-          selected: cur == e.key,
+          selected: selRid == e.key,
           onSelected: (_) {
-            setSheet(() {});
-            Navigator.pop(ctx);
-            widget.repo.settings.setRid(e.key);
-            _load(force: false);
+            setSheet(() {
+              selRid = e.key;
+              selMin = widget.repo.settings.minDurationOf(e.key);
+            });
           },
         ))).toList()),
       ),
+      const Divider(height: 16),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (selRid == 'sub') ...[
+            Row(children: [
+              const Text('长视频时长'),
+              const SizedBox(width: 8),
+              Expanded(child: Slider(
+                value: _minToSubIndex(selMin).toDouble(),
+                min: 0,
+                max: 3,
+                divisions: 3,
+                label: selMin == 0 ? '不限' : '${(selMin / 60).round()} 分钟',
+                onChanged: (v) => setSheet(() => selMin = _subIndexToMin(v.round())),
+              )),
+              Text(selMin == 0 ? '不限' : '${(selMin / 60).round()} 分钟'),
+            ]),
+          ] else
+            Row(children: [
+              const Text('长视频阈值'),
+              const SizedBox(width: 8),
+              Expanded(child: Slider(
+                value: selMin.clamp(600, 1800).toDouble(),
+                min: 600,
+                max: 1800,
+                divisions: 2,
+                label: '${(selMin / 60).round()} 分钟',
+                onChanged: (v) => setSheet(() => selMin = v.round()),
+              )),
+              Text('${(selMin / 60).round()} 分钟'),
+            ]),
+        ]),
+      ),
+      const SizedBox(height: 8),
+      Padding(
+        padding: const EdgeInsets.all(16),
+        child: SizedBox(width: double.infinity, child: FilledButton(
+          onPressed: () {
+            widget.repo.settings.setRid(selRid);
+            widget.repo.settings.setMinDurationOf(selRid, selMin);
+            widget.repo.clearDailyCache();
+            Navigator.pop(ctx);
+            _load(force: true);
+          },
+          child: const Text('应用'),
+        )),
+      ),
     ])));
+  }
+
+  int _minToSubIndex(int min) {
+    if (min == 0) return 0;
+    if (min <= 600) return 1;
+    if (min <= 1200) return 2;
+    return 3;
+  }
+
+  int _subIndexToMin(int index) {
+    return switch (index) { 0 => 0, 1 => 600, 2 => 1200, _ => 1800 };
   }
 
   String _today() {

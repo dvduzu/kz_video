@@ -117,8 +117,8 @@ class FeedService {
   }
 
   Future<List<VideoInfo>> getDailyVideos({bool force = false}) async {
-    final minDuration = store.minDuration;
     final ridKey = store.rid;
+    final minDuration = store.minDurationOf(ridKey);
     final ridMain = _ridMain(ridKey);
     final today = _today();
     final key = 'daily_${ridKey}_$today';

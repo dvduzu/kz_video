@@ -179,6 +179,8 @@ class VideoRepository {
     await store.setWatched([]);
   }
 
+  Future<void> clearDailyCache() => store.clearAllDailyCache();
+
   static String _today() {
     final now = DateTime.now();
     return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
