@@ -185,6 +185,12 @@ class VideoListScreenState extends State<VideoListScreen> {
       actions: [
         FilledButton(
           onPressed: () {
+            final ridChanged = selRid != widget.repo.settings.rid;
+            final minChanged = selMin != widget.repo.settings.minDurationOf(selRid);
+            if (!ridChanged && !minChanged) {
+              Navigator.pop(ctx);
+              return;
+            }
             widget.repo.settings.setRid(selRid);
             widget.repo.settings.setMinDurationOf(selRid, selMin);
             widget.repo.clearDailyCache();

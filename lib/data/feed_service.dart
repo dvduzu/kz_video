@@ -107,13 +107,14 @@ class FeedService {
     }
   }
 
-  Future<List<VideoInfo>> _fetchSubVideos(int ridMain) async {
+  Future<List<VideoInfo>> _fetchSubVideos(int ridMain, {int perUp = 5}) async {
     final subs = await store.subscriptions;
     final all = <VideoInfo>[];
     for (final sub in subs) {
       final mid = sub['mid'];
       if (mid is int) {
-        all.addAll(await videoApi.getUpVideos(mid, tid: ridMain));
+        final upVideos = await videoApi.getUpVideos(mid, tid: ridMain);
+        all.addAll(upVideos.take(perUp));
       }
     }
     return all;
@@ -164,9 +165,8 @@ class FeedService {
       final subVideos = await _fetchSubVideos(ridMain);
       final subFiltered = subVideos.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid) && !watched.contains(v.bvid)).toList()
         ..sort((a, b) => b.pubdate.compareTo(a.pubdate));
-      final picked = subFiltered.take(popularPickLimit).toList()..shuffle(Random());
-      final chosen = picked.take(dailyChosenCount).toList();
-      KzvLogger.debug('daily(sub) min=$minDuration sub=${subFiltered.length} chosen=${chosen.length}');
+      final chosen = subFiltered.take(dailyChosenCount).toList();
+      KzvLogger.debug('daily(sub) min=$minDuration perUp=5 sub=${subFiltered.length} chosen=${chosen.length}');
       if (chosen.isNotEmpty) {
         await store.setDailyCache(key, jsonEncode(chosen.map((e) => e.toJson()).toList()));
         await store.setDailyTs(tsKey, now);
