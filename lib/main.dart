@@ -2,7 +2,6 @@ import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'data/models.dart';
 import 'data/video_repository.dart';
 import 'ui/player_screen.dart';
@@ -50,9 +49,9 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<void> _load() async {
-    final prefs = await SharedPreferences.getInstance();
-    final modeStr = prefs.getString('theme_mode') ?? 'system';
-    final seedStr = prefs.getString('theme_seed') ?? '';
+    final s = widget.repo.settings;
+    final modeStr = s.themeMode;
+    final seedStr = s.themeSeed;
     setState(() {
       mode = switch (modeStr) { 'light' => ThemeMode.light, 'dark' => ThemeMode.dark, _ => ThemeMode.system };
       seed = seedStr.isEmpty ? null : (aospSeeds[seedStr] ?? const Color(0xFF6750A4));
@@ -61,10 +60,10 @@ class _MyAppState extends State<MyApp> {
 
   Future<void> setTheme(ThemeMode newMode, Color? newSeed) async {
     setState(() { mode = newMode; seed = newSeed; });
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('theme_mode', switch (newMode) { ThemeMode.light => 'light', ThemeMode.dark => 'dark', _ => 'system' });
+    final s = widget.repo.settings;
+    await s.setThemeMode(switch (newMode) { ThemeMode.light => 'light', ThemeMode.dark => 'dark', _ => 'system' });
     final seedName = newSeed == null ? '' : (aospSeeds.entries.firstWhere((e) => e.value == newSeed, orElse: () => const MapEntry('蓝', Color(0xFF6750A4))).key);
-    await prefs.setString('theme_seed', seedName);
+    await s.setThemeSeed(seedName);
   }
 
   @override

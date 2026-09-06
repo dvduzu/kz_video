@@ -35,6 +35,10 @@ class LocalStore {
   }
   String get rid => _p.getString('setting_rid') ?? '';
   String get homeRid => _p.getString('setting_home_rid') ?? '';
+  String get themeMode => _p.getString('theme_mode') ?? 'system';
+  String get themeSeed => _p.getString('theme_seed') ?? '';
+  Future<void> setThemeMode(String v) => _p.setString('theme_mode', v);
+  Future<void> setThemeSeed(String v) => _p.setString('theme_seed', v);
   bool get rcmdEnabled => _p.getBool('setting_rcmd_enabled') ?? false;
   int get rcmdBatch => _p.getInt('setting_rcmd_batch') ?? 3;
   bool get guestMode => _p.getBool('guest_mode') ?? false;
