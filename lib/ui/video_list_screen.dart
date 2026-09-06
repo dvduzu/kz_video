@@ -193,9 +193,13 @@ class VideoListScreenState extends State<VideoListScreen> {
             }
             widget.repo.settings.setRid(selRid);
             widget.repo.settings.setMinDurationOf(selRid, selMin);
-            widget.repo.clearDailyCache();
             Navigator.pop(ctx);
-            _load(force: true);
+            if (minChanged) {
+              widget.repo.store.clearDailyCacheFor(selRid);
+              _load(force: true);
+            } else {
+              _load(force: false);
+            }
           },
           child: const Text('应用'),
         ),
