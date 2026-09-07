@@ -120,13 +120,13 @@ class FeedService {
     return all;
   }
 
-  Future<List<VideoInfo>> getDailyVideos({bool force = false}) async {
+  Future<List<VideoInfo>> getDailyVideos({bool force = false, int offset = 0}) async {
     final ridKey = store.rid;
     final minDuration = store.minDurationOf(ridKey);
     final ridMain = _ridMain(ridKey);
     final today = _today();
-    final key = 'daily_${ridKey}_$today';
-    final tsKey = 'daily_ts_${ridKey}_$today';
+    final key = ridKey == 'sub' ? 'daily_${ridKey}_${today}_o$offset' : 'daily_${ridKey}_$today';
+    final tsKey = ridKey == 'sub' ? 'daily_ts_${ridKey}_${today}_o$offset' : 'daily_ts_${ridKey}_$today';
     final now = DateTime.now().millisecondsSinceEpoch;
     final blacklist = await _getBlacklistSet();
     final watched = store.watched.toSet();
@@ -165,8 +165,11 @@ class FeedService {
       final subVideos = await _fetchSubVideos(ridMain);
       final subFiltered = subVideos.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid) && !watched.contains(v.bvid)).toList()
         ..sort((a, b) => b.pubdate.compareTo(a.pubdate));
-      final chosen = subFiltered.take(dailyChosenCount).toList();
-      KzvLogger.debug('daily(sub) min=$minDuration perUp=5 sub=${subFiltered.length} chosen=${chosen.length}');
+      var chosen = subFiltered.skip(offset).take(dailyChosenCount).toList();
+      if (chosen.isEmpty && offset > 0) {
+        chosen = subFiltered.take(dailyChosenCount).toList();
+      }
+      KzvLogger.debug('daily(sub) min=$minDuration perUp=5 sub=${subFiltered.length} offset=$offset chosen=${chosen.length}');
       if (chosen.isNotEmpty) {
         await store.setDailyCache(key, jsonEncode(chosen.map((e) => e.toJson()).toList()));
         await store.setDailyTs(tsKey, now);

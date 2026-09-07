@@ -31,6 +31,7 @@ class VideoListScreenState extends State<VideoListScreen> {
   final Set<String> _watched = {};
   final Set<String> _fading = {};
   final Set<String> selected = {};
+  int _subOffset = 0;
 
   bool get _cardOutlineEnabled => widget.repo.settings.cardOutline;
 
@@ -96,13 +97,17 @@ class VideoListScreenState extends State<VideoListScreen> {
     await widget.repo.clearWatched();
     _watched.clear();
     _fading.clear();
+    if (widget.repo.settings.rid == 'sub') {
+      _subOffset += 10;
+    }
     await _load(force: true);
   }
 
   Future<void> _load({bool force = false}) async {
     setState(() { loading = true; error = null; });
     try {
-      final list = await widget.repo.getDailyVideos(force: force);
+      final offset = widget.repo.settings.rid == 'sub' ? _subOffset : 0;
+      final list = await widget.repo.getDailyVideos(force: force, offset: offset);
       setState(() { videos = list; loading = false; });
     } catch (e) {
       KzvLogger.debug('load error: $e');
@@ -194,6 +199,9 @@ class VideoListScreenState extends State<VideoListScreen> {
             widget.repo.settings.setRid(selRid);
             widget.repo.settings.setMinDurationOf(selRid, selMin);
             Navigator.pop(ctx);
+            if (ridChanged) {
+              _subOffset = 0;
+            }
             if (minChanged) {
               widget.repo.store.clearDailyCacheFor(selRid);
               _load(force: true);
@@ -568,6 +576,7 @@ class VideoListScreenState extends State<VideoListScreen> {
       setState(() {});
     }
     if (ridChanged) {
+      _subOffset = 0;
       await _load(force: false);
     } else if (changed == true || accountChanged) {
       await _load(force: true);

@@ -54,7 +54,7 @@ class VideoRepository {
   Future<List<SearchUser>> searchUsers(String keyword) => videoApi.searchUsers(keyword);
   Future<List<VideoInfo>> getUpVideos(int mid, {int tid = 0}) => videoApi.getUpVideos(mid, tid: tid);
   Future<List<SubtitleCue>?> getSubtitles(String bvid) => videoApi.getSubtitles(bvid);
-  Future<List<VideoInfo>> getDailyVideos({bool force = false}) => feed.getDailyVideos(force: force);
+  Future<List<VideoInfo>> getDailyVideos({bool force = false, int offset = 0}) => feed.getDailyVideos(force: force, offset: offset);
 
   String? get buvid3 => client.auth.buvid3;
 
