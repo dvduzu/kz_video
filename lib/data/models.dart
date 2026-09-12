@@ -1,6 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:material_color_utilities/material_color_utilities.dart';
 
+class AnimPrefs {
+  final bool enabled;
+  final bool page;
+  final bool list;
+  final bool card;
+  final String speed;
+
+  const AnimPrefs({this.enabled = true, this.page = true, this.list = true, this.card = true, this.speed = 'normal'});
+
+  double get factor => switch (speed) { 'slow' => 1.6, 'fast' => 0.55, _ => 1.0 };
+
+  Duration dur(int ms) => Duration(milliseconds: enabled ? (ms * factor).round() : 0);
+
+  bool get pageOn => enabled && page;
+  bool get listOn => enabled && list;
+  bool get cardOn => enabled && card;
+}
+
 enum KzStyle { tonalSpot, spritz, fruitSalad, vibrant, monochrome }
 
 class _Spec {

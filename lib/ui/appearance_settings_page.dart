@@ -5,8 +5,10 @@ class AppearanceSettingsPage extends StatefulWidget {
   final ThemeMode mode;
   final SeedTheme? theme;
   final bool useDynamic;
+  final AnimPrefs anims;
   final Future<void> Function(ThemeMode, SeedTheme?, {bool? dynamic}) onSetTheme;
-  const AppearanceSettingsPage({super.key, required this.mode, required this.theme, required this.useDynamic, required this.onSetTheme});
+  final ValueChanged<AnimPrefs> onSetAnims;
+  const AppearanceSettingsPage({super.key, required this.mode, required this.theme, required this.useDynamic, required this.anims, required this.onSetTheme, required this.onSetAnims});
 
   @override
   State<AppearanceSettingsPage> createState() => _AppearanceSettingsPageState();
@@ -16,6 +18,7 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
   late ThemeMode _mode;
   late SeedTheme? _theme;
   late bool _useDynamic;
+  late AnimPrefs _anims;
   late final PageController _pageCtrl;
   late final List<List<SeedTheme>> _pages;
 
@@ -25,6 +28,7 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
     _mode = widget.mode;
     _theme = widget.theme;
     _useDynamic = widget.useDynamic;
+    _anims = widget.anims;
     _pages = aospThemes.map((t) => t.seed.toARGB32()).toSet().map((c) => aospThemes.where((t) => t.seed.toARGB32() == c).toList()).toList();
     final init = _theme == null ? 0 : _pages.indexWhere((ps) => ps.any((t) => t.key == _theme?.key));
     _pageCtrl = PageController(initialPage: init < 0 ? 0 : init);
@@ -39,6 +43,11 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
   void _set(ThemeMode m, SeedTheme? s, [bool? dynamic]) {
     setState(() { _mode = m; _theme = s; if (dynamic != null) _useDynamic = dynamic; });
     widget.onSetTheme(m, s, dynamic: dynamic);
+  }
+
+  void _setAnims(AnimPrefs a) {
+    setState(() => _anims = a);
+    widget.onSetAnims(a);
   }
 
   int _currentPage = 0;
@@ -82,13 +91,51 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
           Center(child: Text(dynamicOn ? '跟随壁纸 · 动态色' : _pages[_currentPage.clamp(0, _pages.length - 1)].first.key.split('·').first, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant))),
           const SizedBox(height: 8),
           Center(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: List.generate(_pages.length, (i) => AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
+            duration: _anims.listOn ? _anims.dur(200) : Duration.zero,
             margin: const EdgeInsets.symmetric(horizontal: 3),
             width: _page(i) ? 16 : 6,
             height: 6,
             decoration: BoxDecoration(color: _page(i) ? cs.primary : cs.outlineVariant, borderRadius: BorderRadius.circular(3)),
           )))),
           const Divider(height: 24),
+          SwitchListTile(
+            title: const Text('界面动画'),
+            subtitle: const Text('总开关'),
+            value: _anims.enabled,
+            onChanged: (v) => _setAnims(AnimPrefs(enabled: v, page: _anims.page, list: _anims.list, card: _anims.card, speed: _anims.speed)),
+          ),
+          if (_anims.enabled) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+              child: Row(children: [
+                const Text('动画速度'),
+                const SizedBox(width: 12),
+                Wrap(spacing: 8, children: {'slow': '慢', 'normal': '标准', 'fast': '快'}.entries.map((e) => ChoiceChip(
+                  label: Text(e.value),
+                  selected: _anims.speed == e.key,
+                  onSelected: (_) => _setAnims(AnimPrefs(enabled: _anims.enabled, page: _anims.page, list: _anims.list, card: _anims.card, speed: e.key)),
+                )).toList()),
+              ]),
+            ),
+            SwitchListTile(
+              title: const Text('页面转场'),
+              subtitle: const Text('进入 / 返回子页面的过渡'),
+              value: _anims.page,
+              onChanged: (v) => _setAnims(AnimPrefs(enabled: _anims.enabled, page: v, list: _anims.list, card: _anims.card, speed: _anims.speed)),
+            ),
+            SwitchListTile(
+              title: const Text('列表过渡'),
+              subtitle: const Text('加载 / 刷新 / 换一批时的内容过渡'),
+              value: _anims.list,
+              onChanged: (v) => _setAnims(AnimPrefs(enabled: _anims.enabled, page: _anims.page, list: v, card: _anims.card, speed: _anims.speed)),
+            ),
+            SwitchListTile(
+              title: const Text('卡片反馈'),
+              subtitle: const Text('卡片选中 / 跳过的颜色与边框过渡'),
+              value: _anims.card,
+              onChanged: (v) => _setAnims(AnimPrefs(enabled: _anims.enabled, page: _anims.page, list: _anims.list, card: v, speed: _anims.speed)),
+            ),
+          ],
           SwitchListTile(
             title: const Text('动态色彩'),
             subtitle: const Text('将壁纸颜色应用于应用主题'),

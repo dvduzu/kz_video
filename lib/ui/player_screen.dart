@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:media_kit/media_kit.dart';
-import 'package:media_kit_video/media_kit_video.dart';
 import '../data/models.dart';
+import '../data/native_player.dart';
 import '../data/video_repository.dart';
 import '../core/logger.dart';
+import 'native_video.dart';
 
 class PlayerScreen extends StatefulWidget {
   final VideoRepository repo;
@@ -19,8 +19,7 @@ class PlayerScreen extends StatefulWidget {
 }
 
 class _PlayerScreenState extends State<PlayerScreen> {
-  late final Player player;
-  late final VideoController controller;
+  late final NativePlayer player;
   String? error;
   bool isLandscape = true;
   bool showControls = true;
@@ -43,8 +42,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void initState() {
     super.initState();
     SystemChrome.setPreferredOrientations([DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
-    player = Player();
-    controller = VideoController(player);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    player = NativePlayer.instance;
     _listen();
     widget.repo.isWatchLaterEnabled().then((v) { if (mounted) setState(() => watchLaterEnabled = v); });
     if (widget.video.mid > 0) {
@@ -57,7 +56,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _listen() {
-    player.stream.playing.listen((_) { if (mounted) setState(() {}); });
+    player.stream.playing.listen((playing) {
+      if (mounted) setState(() {});
+    });
     player.stream.position.listen((_) { if (mounted) setState(() {}); });
     player.stream.duration.listen((_) { if (mounted) setState(() {}); });
     player.stream.completed.listen((_) {
@@ -102,7 +103,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         'Referer': 'https://www.bilibili.com/video/${widget.video.bvid}',
         if (buvid3 != null) 'Cookie': 'buvid3=$buvid3',
       };
-      await player.open(Media(url, httpHeaders: headers));
+      await player.open(url, headers: headers, title: widget.video.title, artist: widget.video.owner, artwork: widget.video.pic);
       await player.setRate(speed);
       final seekTarget = resumeMs ?? (await widget.repo.getProgress(widget.video.bvid))?.positionMs;
       if (seekTarget != null && seekTarget > 0) {
@@ -217,8 +218,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
     hideTimer?.cancel();
     _toastTimer?.cancel();
-    player.dispose();
+    player.stop();
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
     super.dispose();
   }
 
@@ -240,23 +242,25 @@ class _PlayerScreenState extends State<PlayerScreen> {
       },
       child: Scaffold(
       backgroundColor: Colors.black,
-      body: GestureDetector(
-        onTap: _toggleControls,
-        onDoubleTap: () { playing ? player.pause() : player.play(); },
-        onLongPressStart: (_) {
-          player.setRate(2.0);
-          setState(() { longPressAccel = true; showControls = false; });
-        },
-        onLongPressEnd: (_) {
-          player.setRate(speed);
-          setState(() => longPressAccel = false);
-        },
-        onLongPressCancel: () {
-          player.setRate(speed);
-          if (mounted) setState(() => longPressAccel = false);
-        },
-        child: Stack(children: [
-          Center(child: Video(controller: controller, controls: NoVideoControls)),
+      body: Stack(children: [
+          Center(child: NativeVideo(player: player)),
+          Positioned.fill(child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _toggleControls,
+            onDoubleTap: () { playing ? player.pause() : player.play(); },
+            onLongPressStart: (_) {
+              player.setRate(2.0);
+              setState(() { longPressAccel = true; showControls = false; });
+            },
+            onLongPressEnd: (_) {
+              player.setRate(speed);
+              setState(() => longPressAccel = false);
+            },
+            onLongPressCancel: () {
+              player.setRate(speed);
+              if (mounted) setState(() => longPressAccel = false);
+            },
+          )),
           AnimatedOpacity(
             opacity: showControls ? 0.4 : 0,
             duration: const Duration(milliseconds: 200),
@@ -437,13 +441,12 @@ IconButton(
             ),
 ]),
       ),
-      ),
     );
   }
 }
 
 class _ProgressBar extends StatefulWidget {
-  final Player player;
+  final NativePlayer player;
   final Duration position;
   final Duration duration;
   final VoidCallback onInteract;

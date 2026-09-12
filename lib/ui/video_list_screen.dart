@@ -15,8 +15,10 @@ class VideoListScreen extends StatefulWidget {
   final VoidCallback onToggleTheme;
   final SeedTheme? seed;
   final bool useDynamic;
+  final AnimPrefs anims;
   final Future<void> Function(ThemeMode, SeedTheme?, {bool? dynamic}) onSetTheme;
-  const VideoListScreen({super.key, required this.repo, required this.onPlay, required this.mode, required this.onToggleTheme, required this.seed, required this.useDynamic, required this.onSetTheme});
+  final ValueChanged<AnimPrefs> onSetAnims;
+  const VideoListScreen({super.key, required this.repo, required this.onPlay, required this.mode, required this.onToggleTheme, required this.seed, required this.useDynamic, required this.anims, required this.onSetTheme, required this.onSetAnims});
 
   @override
   State<VideoListScreen> createState() => VideoListScreenState();
@@ -34,6 +36,10 @@ class VideoListScreenState extends State<VideoListScreen> {
   int _subOffset = 0;
 
   bool get _cardOutlineEnabled => widget.repo.settings.cardOutline;
+
+  Duration _dur(int ms) => widget.anims.listOn ? widget.anims.dur(ms) : Duration.zero;
+
+  Duration _cardDur(int ms) => widget.anims.cardOn ? widget.anims.dur(ms) : Duration.zero;
 
   Color get _cardColor => switch (widget.repo.settings.cardTone) {
     'low' => Theme.of(context).colorScheme.surfaceContainerLow,
@@ -250,9 +256,11 @@ class VideoListScreenState extends State<VideoListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: editing
-            ? Text('已选择 ${selected.length} 项')
-            : Row(mainAxisSize: MainAxisSize.min, children: [
+        title: AnimatedSwitcher(
+          duration: _dur(200),
+          child: editing
+            ? Text('已选择 ${selected.length} 项', key: const ValueKey('editing'))
+            : Row(key: const ValueKey('normal'), mainAxisSize: MainAxisSize.min, children: [
                 GestureDetector(
                   onTap: _pickRid,
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -265,6 +273,7 @@ class VideoListScreenState extends State<VideoListScreen> {
                   child: Text(' ${_today()}'),
                 ),
               ]),
+        ),
         leading: editing
             ? IconButton(icon: const Icon(Icons.close), onPressed: _exitEditing)
             : null,
@@ -304,10 +313,11 @@ class VideoListScreenState extends State<VideoListScreen> {
               ],
       ),
       body: Builder(builder: (context) {
-        if (loading) return const Center(child: CircularProgressIndicator());
-        if (error != null) return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Text('加载失败：$error'), const SizedBox(height: 12), FilledButton(onPressed: () => _load(force: true), child: const Text('重试'))]));
+        final Widget content = (() {
+        if (loading) return const Center(key: ValueKey('loading'), child: CircularProgressIndicator());
+        if (error != null) return Center(key: const ValueKey('error'), child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Text('加载失败：$error'), const SizedBox(height: 12), FilledButton(onPressed: () => _load(force: true), child: const Text('重试'))]));
         final list = videos!;
-        if (list.isEmpty) return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        if (list.isEmpty) return Center(key: const ValueKey('empty'), child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
           const Text('¯\\_(ツ)_/¯', style: TextStyle(fontSize: 28)),
           const SizedBox(height: 16),
           FilledButton.tonalIcon(
@@ -316,7 +326,7 @@ class VideoListScreenState extends State<VideoListScreen> {
             label: const Text('换一批'),
           ),
         ]));
-        return Column(children: [
+        return Column(key: const ValueKey('list'), children: [
           Align(
             alignment: Alignment.centerRight,
             child: Padding(
@@ -329,8 +339,11 @@ class VideoListScreenState extends State<VideoListScreen> {
             ),
           ),
           Expanded(
+          child: RefreshIndicator(
+          onRefresh: _onRefresh,
           child: ListView.separated(
           key: ValueKey(Theme.of(context).brightness),
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(12),
           itemCount: list.length,
           separatorBuilder: (_, __) => const SizedBox(height: 12),
@@ -339,29 +352,33 @@ class VideoListScreenState extends State<VideoListScreen> {
             final isSelected = selected.contains(v.bvid);
             final isFading = _fading.contains(v.bvid);
             return AnimatedSize(
-              duration: const Duration(milliseconds: 400),
+              duration: _dur(400),
               curve: Curves.easeInOut,
               child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 400),
+                duration: _dur(400),
                 opacity: isFading ? 0 : 1,
-                child: Card(
+                child: AnimatedContainer(
               key: ValueKey('${v.bvid}_${Theme.of(context).brightness}'),
+              duration: _cardDur(220),
+              curve: Curves.easeOut,
+              margin: const EdgeInsets.all(4),
               clipBehavior: Clip.antiAlias,
-              elevation: 0,
-              color: isSelected
-                  ? Theme.of(context).colorScheme.primaryContainer
-                  : _cardColor,
-              shape: RoundedRectangleBorder(
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? Theme.of(context).colorScheme.primaryContainer
+                    : _cardColor,
                 borderRadius: BorderRadius.circular(12),
-                side: _cardOutlineEnabled
-                    ? BorderSide(
+                border: _cardOutlineEnabled
+                    ? Border.all(
                         color: isSelected
                             ? Theme.of(context).colorScheme.primary
                             : Theme.of(context).colorScheme.outlineVariant,
                         width: isSelected ? 1.5 : 1,
                       )
-                    : BorderSide.none,
+                    : null,
               ),
+              child: Material(
+              color: Colors.transparent,
               child: InkWell(
                 onTap: () {
                   if (editing) {
@@ -398,11 +415,15 @@ class VideoListScreenState extends State<VideoListScreen> {
               ),
             ),
             ),
+            ),
             );
           },
           ),
           ),
+          ),
         ]);
+        })();
+        return AnimatedSwitcher(duration: _dur(250), child: content);
       }),
     );
   }
@@ -518,7 +539,9 @@ class VideoListScreenState extends State<VideoListScreen> {
       mode: widget.mode,
       theme: widget.seed,
       useDynamic: widget.useDynamic,
+      anims: widget.anims,
       onSetTheme: widget.onSetTheme,
+      onSetAnims: widget.onSetAnims,
     )));
   }
 
