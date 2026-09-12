@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/services.dart';
+import '../core/logger.dart';
 
 class _PlayerStreams {
   final playingCtrl = StreamController<bool>.broadcast();
@@ -50,7 +51,9 @@ class NativePlayer {
     if (_textureId != null) return;
     try {
       _textureId = await _method.invokeMethod<int>('textureId');
-    } catch (_) {}
+    } catch (e) {
+      KzvLogger.debug('load textureId failed: $e');
+    }
   }
 
   void _ensureSubscribed() {
@@ -88,11 +91,12 @@ class NativePlayer {
     }
   }
 
-  Future<void> open(String url, {Map<String, String>? headers, String? title, String? artist, String? artwork}) async {
+  Future<void> open(String url, {String? audio, Map<String, String>? headers, String? title, String? artist, String? artwork}) async {
     _ensureSubscribed();
     await loadTextureId();
     await _method.invokeMethod('setUrl', {
       'url': url,
+      'audioUrl': audio,
       'headers': headers ?? <String, String>{},
       'title': title,
       'artist': artist,

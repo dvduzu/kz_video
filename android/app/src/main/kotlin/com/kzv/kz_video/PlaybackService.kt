@@ -9,6 +9,7 @@ import androidx.media3.common.C
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
@@ -28,12 +29,18 @@ class PlaybackService : MediaSessionService() {
         }
         val player = ExoPlayer.Builder(this)
             .setMediaSourceFactory(DefaultMediaSourceFactory(dsFactory))
+            .setLoadControl(
+                DefaultLoadControl.Builder()
+                    .setBufferDurationsMs(2000, 50000, 1000, 2000)
+                    .build()
+            )
             .setAudioAttributes(
                 AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(),
                 true
             )
             .setHandleAudioBecomingNoisy(true)
             .build()
+        PlayerHolder.player = player
         PlayerHolder.surfaceTexture?.let { player.setVideoSurface(Surface(it)) }
         mediaSession = MediaSession.Builder(this, player)
             .setSessionActivity(
@@ -61,6 +68,7 @@ class PlaybackService : MediaSessionService() {
             release()
         }
         mediaSession = null
+        PlayerHolder.player = null
         super.onDestroy()
     }
 }

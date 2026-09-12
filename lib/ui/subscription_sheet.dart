@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/logger.dart';
 import '../data/models.dart';
 import '../data/video_repository.dart';
 
@@ -34,7 +35,8 @@ class _SubscriptionSheetState extends State<SubscriptionSheet> {
     setState(() { searching = true; results = []; });
     try {
       results = await widget.repo.searchUsers(keyword.trim());
-    } catch (_) {
+    } catch (e) {
+      KzvLogger.debug('search users failed: $e');
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('搜索失败，请检查网络后重试')));
     }
     if (mounted) setState(() => searching = false);

@@ -23,7 +23,7 @@ class _ContentSettingsPageState extends State<ContentSettingsPage> {
   late bool _oldRcmdEnabled;
   late int _oldRcmdBatch;
 
-  static const _rids = {'': '全部', 'tech': '科技', 'edu': '知识', 'life': '美食', 'game': '游戏', 'ent': '娱乐', 'music': '音乐', 'sub': '订阅'};
+  static const _rids = {'': '全部', 'hot': '热门', 'tech': '科技', 'edu': '知识', 'life': '美食', 'game': '游戏', 'ent': '娱乐', 'music': '音乐', 'sub': '订阅'};
 
   @override
   void initState() {

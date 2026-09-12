@@ -6,6 +6,7 @@ import '../data/video_repository.dart';
 import 'appearance_settings_page.dart';
 import 'settings_page.dart';
 import 'subscription_sheet.dart';
+import 'up_channel_screen.dart';
 import '../core/logger.dart';
 
 class VideoListScreen extends StatefulWidget {
@@ -50,10 +51,44 @@ class VideoListScreenState extends State<VideoListScreen> {
 
   void markWatched(VideoInfo v) => _markWatched(v);
 
+  final ScrollController _scrollCtrl = ScrollController();
+  int _hotPage = 1;
+  bool _hotLoading = false;
+  bool _hotEnd = false;
+
   @override
   void initState() {
     super.initState();
     _load();
+    _scrollCtrl.addListener(() {
+      if (widget.repo.settings.rid != 'hot') return;
+      if (_scrollCtrl.position.pixels >= _scrollCtrl.position.maxScrollExtent - 600) {
+        _loadMoreHot();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadMoreHot() async {
+    if (_hotLoading || _hotEnd) return;
+    if (widget.repo.settings.recommendCountOf('hot') > 0) return;
+    _hotLoading = true;
+    final next = await widget.repo.getHotVideos(pn: _hotPage + 1);
+    if (!mounted) return;
+    setState(() {
+      if (next.isEmpty) {
+        _hotEnd = true;
+      } else {
+        _hotPage++;
+        videos = [...?videos, ...next];
+      }
+      _hotLoading = false;
+    });
   }
 
   void _markWatched(VideoInfo v) {
@@ -112,6 +147,18 @@ class VideoListScreenState extends State<VideoListScreen> {
   Future<void> _load({bool force = false}) async {
     setState(() { loading = true; error = null; });
     try {
+      if (widget.repo.settings.rid == 'hot') {
+        _hotPage = 1;
+        _hotEnd = false;
+        final limit = widget.repo.settings.recommendCountOf('hot');
+        final list = await widget.repo.getHotVideos(pn: 1, limit: limit);
+        setState(() {
+          videos = list;
+          if (limit > 0) _hotEnd = true;
+          loading = false;
+        });
+        return;
+      }
       final offset = widget.repo.settings.rid == 'sub' ? _subOffset : 0;
       final list = await widget.repo.getDailyVideos(force: force, offset: offset);
       setState(() { videos = list; loading = false; });
@@ -128,6 +175,7 @@ class VideoListScreenState extends State<VideoListScreen> {
   String _ridName(String key) {
     return const {
       '': '全部',
+      'hot': '热门',
       'tech': '科技',
       'edu': '知识',
       'life': '美食',
@@ -141,11 +189,13 @@ class VideoListScreenState extends State<VideoListScreen> {
   void _pickRid() {
     var selRid = widget.repo.settings.rid;
     var selMin = widget.repo.settings.minDurationOf(selRid);
+    var selCount = widget.repo.settings.recommendCountOf(selRid);
     showDialog(context: context, builder: (ctx) => StatefulBuilder(builder: (ctx, setSheet) => AlertDialog(
       title: const Text('分区设置'),
       content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
       Wrap(spacing: 8, children: const {
           '': '全部',
+          'hot': '热门',
           'tech': '科技',
           'edu': '知识',
           'life': '美食',
@@ -160,11 +210,12 @@ class VideoListScreenState extends State<VideoListScreen> {
             setSheet(() {
               selRid = e.key;
               selMin = widget.repo.settings.minDurationOf(e.key);
+              selCount = widget.repo.settings.recommendCountOf(e.key);
             });
           },
         ))).toList()),
       const Divider(height: 16),
-      if (selRid == 'sub') ...[
+      if (selRid == 'sub' || selRid == 'hot') ...[
             Row(children: [
               const Text('长视频时长'),
               const SizedBox(width: 8),
@@ -192,23 +243,38 @@ class VideoListScreenState extends State<VideoListScreen> {
               )),
               Text('${(selMin / 60).round()} 分钟'),
             ]),
+      Row(children: [
+        const Text('推荐数量'),
+        const SizedBox(width: 8),
+        Expanded(child: Slider(
+          value: selCount.toDouble().clamp((selRid == 'hot' ? 0 : 10).toDouble(), 50),
+          min: (selRid == 'hot' ? 0 : 10).toDouble(),
+          max: 50,
+          divisions: selRid == 'hot' ? 10 : 8,
+          label: selCount == 0 ? '不限' : '$selCount 条',
+          onChanged: (v) => setSheet(() => selCount = v.round()),
+        )),
+        Text(selCount == 0 ? '不限' : '$selCount 条'),
+      ]),
       ]),
       actions: [
         FilledButton(
           onPressed: () {
             final ridChanged = selRid != widget.repo.settings.rid;
             final minChanged = selMin != widget.repo.settings.minDurationOf(selRid);
-            if (!ridChanged && !minChanged) {
+            final countChanged = selCount != widget.repo.settings.recommendCountOf(selRid);
+            if (!ridChanged && !minChanged && !countChanged) {
               Navigator.pop(ctx);
               return;
             }
             widget.repo.settings.setRid(selRid);
             widget.repo.settings.setMinDurationOf(selRid, selMin);
+            widget.repo.settings.setRecommendCountOf(selRid, selCount);
             Navigator.pop(ctx);
             if (ridChanged) {
               _subOffset = 0;
             }
-            if (minChanged) {
+            if (minChanged || countChanged) {
               widget.repo.store.clearDailyCacheFor(selRid);
               _load(force: true);
             } else {
@@ -243,6 +309,81 @@ class VideoListScreenState extends State<VideoListScreen> {
     return h > 0 ? '$h:${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}' : '${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
   }
 
+  Widget _buildVideoCard(BuildContext context, VideoInfo v) {
+    final isSelected = selected.contains(v.bvid);
+    final isFading = _fading.contains(v.bvid);
+    return AnimatedSize(
+      duration: _dur(400),
+      curve: Curves.easeInOut,
+      child: AnimatedOpacity(
+        duration: _dur(400),
+        opacity: isFading ? 0 : 1,
+        child: AnimatedContainer(
+          key: ValueKey('${v.bvid}_${Theme.of(context).brightness}'),
+          duration: _cardDur(220),
+          curve: Curves.easeOut,
+          margin: const EdgeInsets.all(4),
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: isSelected
+                ? Theme.of(context).colorScheme.primaryContainer
+                : _cardColor,
+            borderRadius: BorderRadius.circular(12),
+            border: _cardOutlineEnabled
+                ? Border.all(
+                    color: isSelected
+                        ? Theme.of(context).colorScheme.primary
+                        : Theme.of(context).colorScheme.outlineVariant,
+                    width: isSelected ? 1.5 : 1,
+                  )
+                : null,
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                if (editing) {
+                  setState(() { isSelected ? selected.remove(v.bvid) : selected.add(v.bvid); });
+                } else {
+                  widget.onPlay(v);
+                }
+              },
+              onLongPress: () => setState(() {
+                editing = true;
+                selected.add(v.bvid);
+              }),
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: CachedNetworkImage(imageUrl: v.pic, width: 128, height: 76, fit: BoxFit.cover, memCacheWidth: 256),
+                    ),
+                    Expanded(child: Padding(padding: const EdgeInsets.only(left: 12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(v.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Theme.of(context).colorScheme.onSurface)),
+                      const SizedBox(height: 4),
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: v.mid > 0 ? () => _openUpChannel(v) : null,
+                        child: Text(v.owner, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
+                      ),
+                      Text('${_pubdate(v.pubdate)} · ${_duration(v.duration)} · ${_count(v.view)} 播放', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                    ]))),
+                    if (editing)
+                      Icon(isSelected ? Icons.check_circle : Icons.radio_button_unchecked,
+                        color: isSelected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outline),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   String _count(int c) => c >= 10000 ? '${(c / 10000).toStringAsFixed(1)}万' : '$c';
 
   String _pubdate(int ts) {
@@ -272,6 +413,11 @@ class VideoListScreenState extends State<VideoListScreen> {
                   onTap: _onTitleTap,
                   child: Text(' ${_today()}'),
                 ),
+                if (widget.repo.settings.rid == 'sub')
+                  GestureDetector(
+                    onTap: _pickSubFilter,
+                    child: const Padding(padding: EdgeInsets.only(left: 6), child: Icon(Icons.filter_alt_outlined, size: 18)),
+                  ),
               ]),
         ),
         leading: editing
@@ -339,87 +485,42 @@ class VideoListScreenState extends State<VideoListScreen> {
             ),
           ),
           Expanded(
-          child: RefreshIndicator(
-          onRefresh: _onRefresh,
-          child: ListView.separated(
-          key: ValueKey(Theme.of(context).brightness),
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(12),
-          itemCount: list.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 12),
-          itemBuilder: (context, i) {
-            final v = list[i];
-            final isSelected = selected.contains(v.bvid);
-            final isFading = _fading.contains(v.bvid);
-            return AnimatedSize(
-              duration: _dur(400),
-              curve: Curves.easeInOut,
-              child: AnimatedOpacity(
-                duration: _dur(400),
-                opacity: isFading ? 0 : 1,
-                child: AnimatedContainer(
-              key: ValueKey('${v.bvid}_${Theme.of(context).brightness}'),
-              duration: _cardDur(220),
-              curve: Curves.easeOut,
-              margin: const EdgeInsets.all(4),
-              clipBehavior: Clip.antiAlias,
-              decoration: BoxDecoration(
-                color: isSelected
-                    ? Theme.of(context).colorScheme.primaryContainer
-                    : _cardColor,
-                borderRadius: BorderRadius.circular(12),
-                border: _cardOutlineEnabled
-                    ? Border.all(
-                        color: isSelected
-                            ? Theme.of(context).colorScheme.primary
-                            : Theme.of(context).colorScheme.outlineVariant,
-                        width: isSelected ? 1.5 : 1,
-                      )
-                    : null,
-              ),
-              child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: () {
-                  if (editing) {
-                    setState(() { isSelected ? selected.remove(v.bvid) : selected.add(v.bvid); });
-                  } else {
-                    widget.onPlay(v);
-                  }
-                },
-                onLongPress: () => setState(() {
-                  editing = true;
-                  selected.add(v.bvid);
-                }),
-                child: Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: CachedNetworkImage(imageUrl: v.pic, width: 128, height: 76, fit: BoxFit.cover, memCacheWidth: 256),
-                      ),
-                      Expanded(child: Padding(padding: const EdgeInsets.only(left: 12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(v.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Theme.of(context).colorScheme.onSurface)),
-                        const SizedBox(height: 4),
-                        Text(v.owner, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                        Text('${_pubdate(v.pubdate)} · ${_duration(v.duration)} · ${_count(v.view)} 播放', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                      ]))),
-                      if (editing)
-                        Icon(isSelected ? Icons.check_circle : Icons.radio_button_unchecked,
-                          color: isSelected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outline),
-                    ],
+            child: RefreshIndicator(
+              onRefresh: _onRefresh,
+              child: LayoutBuilder(builder: (context, constraints) {
+                final isTablet = MediaQuery.of(context).size.shortestSide >= 600;
+                final cols = !isTablet ? 1 : (constraints.maxWidth >= 1100 ? 3 : 2);
+                final Widget? footer = _hotLoading
+                    ? const Padding(padding: EdgeInsets.symmetric(vertical: 20), child: Center(child: CircularProgressIndicator()))
+                    : null;
+                final extra = footer == null ? 0 : 1;
+                if (cols <= 1) {
+                  return ListView.separated(
+                    controller: _scrollCtrl,
+                    key: ValueKey(Theme.of(context).brightness),
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(12),
+                    itemCount: list.length + extra,
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    itemBuilder: (context, i) => i >= list.length ? footer! : _buildVideoCard(context, list[i]),
+                  );
+                }
+                return GridView.builder(
+                  controller: _scrollCtrl,
+                  key: ValueKey('${Theme.of(context).brightness}_$cols'),
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(12),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: cols,
+                    mainAxisSpacing: 8,
+                    crossAxisSpacing: 8,
+                    mainAxisExtent: 140,
                   ),
-                ),
-              ),
+                  itemCount: list.length + extra,
+                  itemBuilder: (context, i) => i >= list.length ? footer! : _buildVideoCard(context, list[i]),
+                );
+              }),
             ),
-            ),
-            ),
-            );
-          },
-          ),
-          ),
           ),
         ]);
         })();
@@ -532,6 +633,70 @@ class VideoListScreenState extends State<VideoListScreen> {
 
   Future<void> _showSubscriptions() async {
     showModalBottomSheet(context: context, showDragHandle: true, isScrollControlled: true, builder: (_) => SubscriptionSheet(repo: widget.repo));
+  }
+
+  Future<void> _openUpChannel(VideoInfo v) async {
+    if (v.mid <= 0) return;
+    if (v.owner.contains('联合创作')) {
+      final staff = await widget.repo.getVideoStaff(v.bvid);
+      if (!mounted) return;
+      if (staff.length > 1) {
+        showModalBottomSheet(context: context, showDragHandle: true, builder: (ctx) => SafeArea(child: ListView(
+          shrinkWrap: true,
+          children: staff.map((s) => ListTile(
+            leading: CircleAvatar(
+              backgroundImage: s.face.isNotEmpty ? CachedNetworkImageProvider(s.face.startsWith('//') ? 'https:${s.face}' : s.face) : null,
+              child: s.face.isEmpty ? const Icon(Icons.person) : null,
+            ),
+            title: Text(s.name),
+            onTap: () { Navigator.pop(ctx); _gotoUp(s.mid, s.name, v.bvid); },
+          )).toList(),
+        )));
+        return;
+      }
+    }
+    _gotoUp(v.mid, v.owner, v.bvid);
+  }
+
+  Future<void> _pickSubFilter() async {
+    final subs = await widget.repo.getSubscriptions();
+    if (!mounted) return;
+    final current = widget.repo.settings.subFilterMid;
+    showModalBottomSheet(context: context, showDragHandle: true, builder: (ctx) => SafeArea(child: ListView(
+      shrinkWrap: true,
+      children: [
+        ListTile(
+          leading: const Icon(Icons.all_inclusive),
+          title: const Text('全部'),
+          selected: current == 0,
+          onTap: () { Navigator.pop(ctx); _setSubFilter(0); },
+        ),
+        ...subs.map((s) => ListTile(
+          leading: CircleAvatar(
+            backgroundImage: s.face.isNotEmpty ? CachedNetworkImageProvider(s.face.startsWith('//') ? 'https:${s.face}' : s.face) : null,
+            child: s.face.isEmpty ? const Icon(Icons.person) : null,
+          ),
+          title: Text(s.name),
+          selected: current == s.mid,
+          onTap: () { Navigator.pop(ctx); _setSubFilter(s.mid); },
+        )),
+      ],
+    )));
+  }
+
+  void _setSubFilter(int mid) {
+    widget.repo.settings.setSubFilterMid(mid);
+    _subOffset = 0;
+    _load(force: true);
+  }
+
+  void _gotoUp(int mid, String name, String bvid) {    Navigator.push(context, MaterialPageRoute(builder: (_) => UpChannelScreen(
+      repo: widget.repo,
+      mid: mid,
+      name: name,
+      bvid: bvid,
+      onPlay: widget.onPlay,
+    )));
   }
 
   void _showColorSettings() {

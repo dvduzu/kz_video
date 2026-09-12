@@ -5,6 +5,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.view.Surface
 import androidx.annotation.OptIn
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -12,6 +13,9 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.source.MergingMediaSource
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.MoreExecutors
@@ -27,6 +31,7 @@ class ExoPlayerController(context: Context, textureEntry: TextureRegistry.Surfac
     val textureId: Long = textureEntry.id()
     private var controller: MediaController? = null
     private var pendingItem: MediaItem? = null
+    private var pendingAudio: String? = null
     private val handler = Handler(Looper.getMainLooper())
     private var sink: EventChannel.EventSink? = null
     private var ticking = false
@@ -61,7 +66,9 @@ class ExoPlayerController(context: Context, textureEntry: TextureRegistry.Surfac
     }
 
     init {
-        PlayerHolder.surfaceTexture = textureEntry.surfaceTexture()
+        val st = textureEntry.surfaceTexture()
+        PlayerHolder.surfaceTexture = st
+        PlayerHolder.player?.setVideoSurface(Surface(st))
         val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
         val future = MediaController.Builder(context, token).buildAsync()
         future.addListener({
@@ -69,8 +76,10 @@ class ExoPlayerController(context: Context, textureEntry: TextureRegistry.Surfac
                 controller = future.get()
                 controller?.addListener(listener)
                 pendingItem?.let { item ->
+                    val audio = pendingAudio
                     pendingItem = null
-                    applyItem(item)
+                    pendingAudio = null
+                    applyItem(item, audio)
                 }
             } catch (_: Exception) {
             }
@@ -106,14 +115,23 @@ class ExoPlayerController(context: Context, textureEntry: TextureRegistry.Surfac
         )
     }
 
-    private fun applyItem(item: MediaItem) {
-        val c = controller ?: return
-        c.setMediaItem(item)
-        c.prepare()
-        c.playWhenReady = true
+    private fun applyItem(item: MediaItem, audioUrl: String?) {
+        val player = PlayerHolder.player ?: return
+        if (audioUrl != null && audioUrl.isNotEmpty()) {
+            val ds = DefaultHttpDataSource.Factory()
+                .setDefaultRequestProperties(PlayerHolder.headers)
+                .setAllowCrossProtocolRedirects(true)
+            val videoSource = ProgressiveMediaSource.Factory(ds).createMediaSource(item)
+            val audioSource = ProgressiveMediaSource.Factory(ds).createMediaSource(MediaItem.fromUri(Uri.parse(audioUrl)))
+            player.setMediaSource(MergingMediaSource(videoSource, audioSource))
+        } else {
+            player.setMediaItem(item)
+        }
+        player.prepare()
+        player.playWhenReady = true
     }
 
-    fun setUrl(url: String, headers: Map<String, String>, title: String?, artist: String?, artwork: String?) {
+    fun setUrl(url: String, audioUrl: String?, headers: Map<String, String>, title: String?, artist: String?, artwork: String?) {
         PlayerHolder.headers = headers
         val metadata = MediaMetadata.Builder()
             .setTitle(title)
@@ -126,8 +144,9 @@ class ExoPlayerController(context: Context, textureEntry: TextureRegistry.Surfac
             .build()
         if (controller == null) {
             pendingItem = item
+            pendingAudio = audioUrl
         } else {
-            applyItem(item)
+            applyItem(item, audioUrl)
         }
     }
 
@@ -184,7 +203,7 @@ class ExoPlayerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventCha
             "setUrl" -> {
                 val url = call.argument<String>("url") ?: ""
                 val headers = call.argument<Map<String, String>>("headers") ?: emptyMap()
-                c.setUrl(url, headers, call.argument<String>("title"), call.argument<String>("artist"), call.argument<String>("artwork"))
+                c.setUrl(url, call.argument<String>("audioUrl"), headers, call.argument<String>("title"), call.argument<String>("artist"), call.argument<String>("artwork"))
                 result.success(null)
             }
             "play" -> { c.play(); result.success(null) }

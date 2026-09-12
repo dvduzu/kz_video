@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'bilibili_client.dart';
+import 'api_endpoints.dart';
 import 'credential_store.dart';
 import 'local_store.dart';
 import '../core/logger.dart';
@@ -20,7 +21,9 @@ class AuthRepository {
       final decoded = utf8.decode(base64.decode(base64.normalize(sessdata)));
       final parts = decoded.split('.');
       if (parts.length >= 3) return int.tryParse(parts[2]) ?? 0;
-    } catch (_) {}
+    } catch (e) {
+      KzvLogger.debug('parse sessdata failed: $e');
+    }
     return 0;
   }
 
@@ -44,21 +47,22 @@ class AuthRepository {
 
   Future<({String key, String url})?> webQrGenerate() async {
     try {
-      final resp = await dio.get('https://passport.bilibili.com/x/passport-login/web/qrcode/generate');
+      final resp = await dio.get(ApiEndpoints.qrGenerate);
       final data = resp.data as Map<String, dynamic>;
       final d = data['data'] as Map<String, dynamic>?;
       final key = d?['qrcode_key'] as String?;
       final url = d?['url'] as String?;
       if (key == null || key.isEmpty) return null;
       return (key: key, url: url ?? '');
-    } catch (_) {
+    } catch (e) {
+      KzvLogger.debug('qr generate failed: $e');
       return null;
     }
   }
 
   Future<bool> webQrPoll(String key) async {
     try {
-      final resp = await dio.get('https://passport.bilibili.com/x/passport-login/web/qrcode/poll', queryParameters: {'qrcode_key': key});
+      final resp = await dio.get(ApiEndpoints.qrPoll, queryParameters: {'qrcode_key': key});
       final data = resp.data as Map<String, dynamic>;
       final d = data['data'] as Map<String, dynamic>?;
       final code = d?['code'] as int?;
@@ -75,7 +79,8 @@ class AuthRepository {
         }
       }
       return false;
-    } catch (_) {
+    } catch (e) {
+      KzvLogger.debug('qr poll failed: $e');
       return false;
     }
   }
@@ -116,7 +121,7 @@ class AuthRepository {
       final hasSessdata = client.auth.fullCookies?.containsKey('SESSDATA') == true;
       KzvLogger.debug('validate: hasSESSDATA=$hasSessdata');
       final cookieHeader = client.auth.fullCookies?.entries.map((e) => '${e.key}=${e.value}').join('; ');
-      final resp = await dio.get('https://api.bilibili.com/x/web-interface/nav', options: Options(headers: {
+      final resp = await dio.get(ApiEndpoints.webNav, options: Options(headers: {
         if (cookieHeader != null) 'Cookie': cookieHeader,
       }));
       final data = resp.data as Map<String, dynamic>;

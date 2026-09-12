@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'api_endpoints.dart';
 import 'wbi_sign.dart';
 
 class WbiService {
@@ -12,7 +13,7 @@ class WbiService {
   Future<String> getMixinKey() async {
     final now = DateTime.now().millisecondsSinceEpoch;
     if (_mixinKey == null || now - _mixinFetchedAt > 12 * 3600 * 1000) {
-      final resp = await dio.get('/x/web-interface/nav');
+      final resp = await dio.get(ApiEndpoints.nav);
       final wbiImg = resp.data['data']?['wbi_img'];
       final imgUrl = wbiImg?['img_url'] as String? ?? '';
       final subUrl = wbiImg?['sub_url'] as String? ?? '';

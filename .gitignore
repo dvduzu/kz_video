@@ -50,11 +50,6 @@ app.*.map.json
 # Nix dev environment
 .tooling/
 .direnv/
-flake.lock
-
-# Nix dev environment (excluded)
-.tooling/
-.direnv/
 .envrc
 flake.lock
 flake.nix

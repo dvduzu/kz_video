@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import '../core/logger.dart';
 import '../data/video_repository.dart';
 import 'content_settings_page.dart';
 import 'login_sheet.dart';
@@ -99,7 +100,8 @@ class _SettingsPageState extends State<SettingsPage> {
             if (decoded is! Map<String, dynamic>) throw const FormatException('格式错误');
             await widget.repo.importData(decoded);
             if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('导入成功')));
-          } catch (_) {
+          } catch (e) {
+            KzvLogger.debug('import from file failed: $e');
             if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('导入失败：数据格式无效')));
           }
         }, child: const Text('从文件导入')),
@@ -110,7 +112,8 @@ class _SettingsPageState extends State<SettingsPage> {
             await widget.repo.importData(decoded);
             if (ctx.mounted) Navigator.pop(ctx);
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('导入成功')));
-          } catch (_) {
+          } catch (e) {
+            KzvLogger.debug('import from text failed: $e');
             if (ctx.mounted) Navigator.pop(ctx);
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('导入失败：数据格式无效')));
           }

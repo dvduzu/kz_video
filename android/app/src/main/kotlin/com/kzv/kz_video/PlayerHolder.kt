@@ -1,6 +1,7 @@
 package com.kzv.kz_video
 
 import android.graphics.SurfaceTexture
+import androidx.media3.exoplayer.ExoPlayer
 
 object PlayerHolder {
     @Volatile
@@ -8,4 +9,7 @@ object PlayerHolder {
 
     @Volatile
     var headers: Map<String, String> = emptyMap()
+
+    @Volatile
+    var player: ExoPlayer? = null
 }

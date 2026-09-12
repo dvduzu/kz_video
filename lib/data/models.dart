@@ -206,6 +206,14 @@ SeedTheme? seedThemeForKey(String key) {
   return null;
 }
 
+class DanmakuItem {
+  final double time;
+  final int mode;
+  final int color;
+  final String text;
+  const DanmakuItem(this.time, this.mode, this.color, this.text);
+}
+
 class VideoInfo {
   final String bvid;
   final String title;
@@ -216,7 +224,8 @@ class VideoInfo {
   final int pubdate;
   final int mid;
   final int tid;
-  VideoInfo({required this.bvid, required this.title, required this.pic, required this.duration, required this.owner, required this.view, this.pubdate = 0, this.mid = 0, this.tid = 0});
+  final int aid;
+  VideoInfo({required this.bvid, required this.title, required this.pic, required this.duration, required this.owner, required this.view, this.pubdate = 0, this.mid = 0, this.tid = 0, this.aid = 0});
   factory VideoInfo.fromJson(Map<String, dynamic> json) => VideoInfo(
     bvid: json['bvid'] as String,
     title: json['title'] as String,
@@ -227,8 +236,9 @@ class VideoInfo {
     pubdate: json['pubdate'] as int? ?? 0,
     mid: json['mid'] as int? ?? 0,
     tid: json['tid'] as int? ?? 0,
+    aid: json['aid'] as int? ?? 0,
   );
-  Map<String, dynamic> toJson() => {'bvid': bvid, 'title': title, 'pic': pic, 'duration': duration, 'owner': owner, 'view': view, 'pubdate': pubdate, 'mid': mid, 'tid': tid};
+  Map<String, dynamic> toJson() => {'bvid': bvid, 'title': title, 'pic': pic, 'duration': duration, 'owner': owner, 'view': view, 'pubdate': pubdate, 'mid': mid, 'tid': tid, 'aid': aid};
 }
 
 class SubtitleCue {

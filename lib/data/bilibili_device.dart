@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'bilibili_auth.dart';
+import 'api_endpoints.dart';
 import '../core/logger.dart';
 
 class BilibiliDevice {
@@ -54,7 +55,7 @@ class BilibiliDevice {
       }
     }
     try {
-      final spi = await dio.get('https://api.bilibili.com/x/frontend/finger/spi');
+      final spi = await dio.get(ApiEndpoints.fingerSpi);
       final data = (spi.data as Map<String, dynamic>)['data'] as Map<String, dynamic>;
       final b3 = data['b_3'] as String? ?? '';
       final b4 = data['b_4'] as String? ?? '';
@@ -92,7 +93,7 @@ class BilibiliDevice {
     final hexSign = _hmacSha256('XgwSnGZ1p', 'ts$ts');
     try {
       final tick = await dio.post(
-        'https://api.bilibili.com/bapis/bilibili.api.ticket.v1.Ticket/GenWebTicket',
+        ApiEndpoints.genWebTicket,
         queryParameters: {'key_id': 'ec02', 'hexsign': hexSign, 'context[ts]': '$ts', 'csrf': ''},
       );
       final td = (tick.data as Map<String, dynamic>)['data'] as Map<String, dynamic>?;
@@ -121,7 +122,7 @@ class BilibiliDevice {
         },
       });
       await dio.post(
-        '/x/internal/gaia-gateway/ExClimbWuzhi',
+        ApiEndpoints.gaiaExClimbWuzhi,
         data: {'payload': jsonData},
         options: Options(headers: auth.fullLoginHeaders()),
       );

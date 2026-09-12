@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
+import '../core/logger.dart';
 import 'auth_repository.dart';
 import 'bilibili_client.dart';
 import 'feed_service.dart';
@@ -50,11 +51,16 @@ class VideoRepository {
   Future<bool> loginWithCookie(String cookieHeader) => auth.loginWithCookie(cookieHeader);
   Future<void> restoreLogin() => auth.restoreLogin();
   Future<void> logout() => auth.logout();
-  Future<String> getPlayUrl(String bvid, {int? qn}) => videoApi.getPlayUrl(bvid, qn: qn);
+  Future<({String videoUrl, String? audioUrl})> getPlayUrl(String bvid, {int? qn}) => videoApi.getPlayUrl(bvid, qn: qn);
   Future<List<SearchUser>> searchUsers(String keyword) => videoApi.searchUsers(keyword);
-  Future<List<VideoInfo>> getUpVideos(int mid, {int tid = 0}) => videoApi.getUpVideos(mid, tid: tid);
+  Future<List<DanmakuItem>> getDanmaku(String bvid, {int durationSec = 0}) => videoApi.getDanmaku(bvid, durationSec: durationSec);
+  Future<List<({int mid, String name, String face})>> getVideoStaff(String bvid) => videoApi.getVideoStaff(bvid);
+  Future<List<VideoInfo>> getUpVideos(int mid, {int tid = 0, int pn = 1, int cursor = 0}) => videoApi.getUpVideos(mid, tid: tid, pn: pn, cursor: cursor);
+  Future<({String name, String face, int fans, String banner})?> getUserInfo(int mid) => videoApi.getUserInfo(mid);
+  Future<({String name, String face, int fans, String banner})?> getUpInfoByVideo(String bvid) => videoApi.getUpInfoByVideo(bvid);
   Future<List<SubtitleCue>?> getSubtitles(String bvid) => videoApi.getSubtitles(bvid);
   Future<List<VideoInfo>> getDailyVideos({bool force = false, int offset = 0}) => feed.getDailyVideos(force: force, offset: offset);
+  Future<List<VideoInfo>> getHotVideos({int pn = 1, int limit = 0}) => feed.getHotVideos(pn: pn, limit: limit);
 
   String? get buvid3 => client.auth.buvid3;
 
@@ -67,7 +73,7 @@ class VideoRepository {
 
   Future<List<VideoInfo>> getBlacklistItems() async {
     return store.blacklist.map((e) {
-      try { return VideoInfo.fromJson(e); } catch (_) { return null; }
+      try { return VideoInfo.fromJson(e); } catch (err) { KzvLogger.debug('parse VideoInfo failed: $err'); return null; }
     }).whereType<VideoInfo>().toList();
   }
 
@@ -107,7 +113,7 @@ class VideoRepository {
 
   Future<List<VideoInfo>> getHistory() async {
     return store.history.map((e) {
-      try { return VideoInfo.fromJson(e); } catch (_) { return null; }
+      try { return VideoInfo.fromJson(e); } catch (err) { KzvLogger.debug('parse VideoInfo failed: $err'); return null; }
     }).whereType<VideoInfo>().toList();
   }
 
@@ -130,7 +136,7 @@ class VideoRepository {
 
   Future<List<VideoInfo>> getWatchLater() async {
     return store.watchLater.map((e) {
-      try { return VideoInfo.fromJson(e); } catch (_) { return null; }
+      try { return VideoInfo.fromJson(e); } catch (err) { KzvLogger.debug('parse VideoInfo failed: $err'); return null; }
     }).whereType<VideoInfo>().toList();
   }
 
@@ -156,7 +162,7 @@ class VideoRepository {
     return store.subscriptions.map((m) {
       try {
         return (mid: m['mid'] as int, name: m['name'] as String? ?? '', face: (m['face'] as String?) ?? '');
-      } catch (_) { return null; }
+      } catch (err) { KzvLogger.debug('parse subscription failed: $err'); return null; }
     }).whereType<({int mid, String name, String face})>().toList();
   }
 
