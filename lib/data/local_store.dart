@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/logger.dart';
+import 'models.dart';
 import 'preference_keys.dart';
 
 class LocalStore {
@@ -36,6 +37,9 @@ class LocalStore {
   String get themeMode => _p.getString(PreferenceKeys.themeMode) ?? 'system';
   String get themeSeed => _p.getString(PreferenceKeys.themeSeed) ?? '';
   bool get dynamicColor => _p.getBool(PreferenceKeys.dynamicColor) ?? false;
+  String get uiMode => _p.getString(PreferenceKeys.uiMode) ?? 'auto';
+  UiMode get uiModeMode => switch (uiMode) { 'phone' => UiMode.phone, 'tablet' => UiMode.tablet, _ => UiMode.auto };
+  Future<void> setUiMode(String v) => _p.setString(PreferenceKeys.uiMode, v);
   Future<void> setThemeMode(String v) => _p.setString(PreferenceKeys.themeMode, v);
   Future<void> setThemeSeed(String v) => _p.setString(PreferenceKeys.themeSeed, v);
   Future<void> setDynamicColor(bool v) => _p.setBool(PreferenceKeys.dynamicColor, v);

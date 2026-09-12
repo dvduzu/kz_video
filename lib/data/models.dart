@@ -19,6 +19,8 @@ class AnimPrefs {
   bool get cardOn => enabled && card;
 }
 
+enum UiMode { auto, phone, tablet }
+
 enum KzStyle { tonalSpot, spritz, fruitSalad, vibrant, monochrome }
 
 class _Spec {

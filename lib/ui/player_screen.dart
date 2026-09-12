@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../data/models.dart';
 import '../data/native_player.dart';
 import '../data/video_repository.dart';
+import '../core/app_orientation.dart';
 import '../core/logger.dart';
 import 'native_video.dart';
 
@@ -381,7 +382,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _ticker.dispose();
     player.stop();
     WidgetsBinding.instance.removeObserver(this);
-    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    AppOrientation.apply(widget.repo.settings.uiModeMode);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
     super.dispose();
   }

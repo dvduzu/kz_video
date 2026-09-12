@@ -7,6 +7,7 @@ import 'appearance_settings_page.dart';
 import 'settings_page.dart';
 import 'subscription_sheet.dart';
 import 'up_channel_screen.dart';
+import '../core/app_orientation.dart';
 import '../core/logger.dart';
 
 class VideoListScreen extends StatefulWidget {
@@ -17,9 +18,11 @@ class VideoListScreen extends StatefulWidget {
   final SeedTheme? seed;
   final bool useDynamic;
   final AnimPrefs anims;
+  final UiMode uiMode;
   final Future<void> Function(ThemeMode, SeedTheme?, {bool? dynamic}) onSetTheme;
   final ValueChanged<AnimPrefs> onSetAnims;
-  const VideoListScreen({super.key, required this.repo, required this.onPlay, required this.mode, required this.onToggleTheme, required this.seed, required this.useDynamic, required this.anims, required this.onSetTheme, required this.onSetAnims});
+  final ValueChanged<UiMode> onSetUiMode;
+  const VideoListScreen({super.key, required this.repo, required this.onPlay, required this.mode, required this.onToggleTheme, required this.seed, required this.useDynamic, required this.anims, required this.uiMode, required this.onSetTheme, required this.onSetAnims, required this.onSetUiMode});
 
   @override
   State<VideoListScreen> createState() => VideoListScreenState();
@@ -367,7 +370,7 @@ class VideoListScreenState extends State<VideoListScreen> {
                       GestureDetector(
                         behavior: HitTestBehavior.opaque,
                         onTap: v.mid > 0 ? () => _openUpChannel(v) : null,
-                        child: Text(v.owner, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
+                        child: Text(v.owner, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
                       ),
                       Text('${_pubdate(v.pubdate)} · ${_duration(v.duration)} · ${_count(v.view)} 播放', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
                     ]))),
@@ -488,8 +491,8 @@ class VideoListScreenState extends State<VideoListScreen> {
             child: RefreshIndicator(
               onRefresh: _onRefresh,
               child: LayoutBuilder(builder: (context, constraints) {
-                final isTablet = MediaQuery.of(context).size.shortestSide >= 600;
-                final cols = !isTablet ? 1 : (constraints.maxWidth >= 1100 ? 3 : 2);
+                final resolved = AppOrientation.resolve(widget.uiMode, MediaQuery.of(context).size.shortestSide);
+                final cols = resolved == UiMode.phone ? 1 : (constraints.maxWidth >= 1100 ? 3 : 2);
                 final Widget? footer = _hotLoading
                     ? const Padding(padding: EdgeInsets.symmetric(vertical: 20), child: Center(child: CircularProgressIndicator()))
                     : null;
@@ -705,8 +708,10 @@ class VideoListScreenState extends State<VideoListScreen> {
       theme: widget.seed,
       useDynamic: widget.useDynamic,
       anims: widget.anims,
+      uiMode: widget.uiMode,
       onSetTheme: widget.onSetTheme,
       onSetAnims: widget.onSetAnims,
+      onSetUiMode: widget.onSetUiMode,
     )));
   }
 

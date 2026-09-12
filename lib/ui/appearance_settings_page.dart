@@ -6,9 +6,11 @@ class AppearanceSettingsPage extends StatefulWidget {
   final SeedTheme? theme;
   final bool useDynamic;
   final AnimPrefs anims;
+  final UiMode uiMode;
   final Future<void> Function(ThemeMode, SeedTheme?, {bool? dynamic}) onSetTheme;
   final ValueChanged<AnimPrefs> onSetAnims;
-  const AppearanceSettingsPage({super.key, required this.mode, required this.theme, required this.useDynamic, required this.anims, required this.onSetTheme, required this.onSetAnims});
+  final ValueChanged<UiMode> onSetUiMode;
+  const AppearanceSettingsPage({super.key, required this.mode, required this.theme, required this.useDynamic, required this.anims, required this.uiMode, required this.onSetTheme, required this.onSetAnims, required this.onSetUiMode});
 
   @override
   State<AppearanceSettingsPage> createState() => _AppearanceSettingsPageState();
@@ -19,6 +21,7 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
   late SeedTheme? _theme;
   late bool _useDynamic;
   late AnimPrefs _anims;
+  late UiMode _uiMode;
   late final PageController _pageCtrl;
   late final List<List<SeedTheme>> _pages;
 
@@ -29,6 +32,7 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
     _theme = widget.theme;
     _useDynamic = widget.useDynamic;
     _anims = widget.anims;
+    _uiMode = widget.uiMode;
     _pages = aospThemes.map((t) => t.seed.toARGB32()).toSet().map((c) => aospThemes.where((t) => t.seed.toARGB32() == c).toList()).toList();
     final init = _theme == null ? 0 : _pages.indexWhere((ps) => ps.any((t) => t.key == _theme?.key));
     _pageCtrl = PageController(initialPage: init < 0 ? 0 : init);
@@ -48,6 +52,11 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
   void _setAnims(AnimPrefs a) {
     setState(() => _anims = a);
     widget.onSetAnims(a);
+  }
+
+  void _setUiMode(UiMode m) {
+    setState(() => _uiMode = m);
+    widget.onSetUiMode(m);
   }
 
   int _currentPage = 0;
@@ -97,6 +106,23 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
             height: 6,
             decoration: BoxDecoration(color: _page(i) ? cs.primary : cs.outlineVariant, borderRadius: BorderRadius.circular(3)),
           )))),
+          const Divider(height: 24),
+          const Text('界面', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Wrap(spacing: 8, children: {
+            UiMode.auto: '自动',
+            UiMode.phone: '手机',
+            UiMode.tablet: '平板',
+          }.entries.map((e) => ChoiceChip(
+            label: Text(e.value),
+            selected: _uiMode == e.key,
+            onSelected: (_) => _setUiMode(e.key),
+          )).toList()),
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Text('自动按屏幕尺寸判断；平板允许横竖屏', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+          ),
           const Divider(height: 24),
           SwitchListTile(
             title: const Text('界面动画'),

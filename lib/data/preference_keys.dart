@@ -33,6 +33,7 @@ abstract final class PreferenceKeys {
   static const themeMode = 'theme_mode';
   static const themeSeed = 'theme_seed';
   static const dynamicColor = 'dynamic_color';
+  static const uiMode = 'ui_mode';
   static const debugUnlimitedRefresh = 'debug_unlimited_refresh';
   static const dailyCachePrefix = 'daily_';
 

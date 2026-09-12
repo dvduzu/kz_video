@@ -1,6 +1,6 @@
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'core/app_orientation.dart';
 import 'data/models.dart';
 import 'data/video_repository.dart';
 import 'ui/player_screen.dart';
@@ -8,9 +8,9 @@ import 'ui/video_list_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   final repo = await VideoRepository.create();
   await repo.restoreLogin();
+  await AppOrientation.apply(repo.settings.uiModeMode);
   final homeRid = repo.settings.homeRid;
   if (homeRid != repo.settings.rid) {
     await repo.settings.setRid(homeRid);
@@ -54,6 +54,7 @@ class _MyAppState extends State<MyApp> {
   ThemeMode mode = ThemeMode.system;
   SeedTheme? theme;
   bool useDynamic = false;
+  UiMode uiMode = UiMode.auto;
   AnimPrefs anims = const AnimPrefs();
 
   @override
@@ -68,6 +69,7 @@ class _MyAppState extends State<MyApp> {
       mode = switch (s.themeMode) { 'light' => ThemeMode.light, 'dark' => ThemeMode.dark, _ => ThemeMode.system };
       theme = seedThemeForKey(s.themeSeed);
       useDynamic = s.dynamicColor;
+      uiMode = s.uiModeMode;
       anims = AnimPrefs(enabled: s.animEnabled, page: s.animPage, list: s.animList, card: s.animCard, speed: s.animSpeed);
     });
   }
@@ -91,6 +93,12 @@ class _MyAppState extends State<MyApp> {
     await s.setAnimSpeed(a.speed);
   }
 
+  Future<void> setUiMode(UiMode m) async {
+    setState(() => uiMode = m);
+    await widget.repo.settings.setUiMode(switch (m) { UiMode.phone => 'phone', UiMode.tablet => 'tablet', UiMode.auto => 'auto' });
+    await AppOrientation.apply(m);
+  }
+
   @override
   Widget build(BuildContext context) {
     return DynamicColorBuilder(builder: (lightDynamic, darkDynamic) {
@@ -108,7 +116,7 @@ class _MyAppState extends State<MyApp> {
         theme: ThemeData(colorScheme: lightCs, useMaterial3: true, pageTransitionsTheme: anims.pageOn ? _pageTransitions : _noPageTransitions, snackBarTheme: _snackBarTheme(Brightness.light, lightCs.primary)),
         darkTheme: ThemeData(colorScheme: darkCs, useMaterial3: true, pageTransitionsTheme: anims.pageOn ? _pageTransitions : _noPageTransitions, snackBarTheme: _snackBarTheme(Brightness.dark, darkCs.primary)),
         themeMode: mode,
-        home: App(repo: widget.repo, mode: mode, onToggleTheme: toggle, theme: theme, useDynamic: useDynamic, anims: anims, onSetTheme: setTheme, onSetAnims: setAnims),
+        home: App(repo: widget.repo, mode: mode, onToggleTheme: toggle, theme: theme, useDynamic: useDynamic, anims: anims, uiMode: uiMode, onSetTheme: setTheme, onSetAnims: setAnims, onSetUiMode: setUiMode),
       );
     });
   }
@@ -127,9 +135,11 @@ class App extends StatefulWidget {
   final SeedTheme? theme;
   final bool useDynamic;
   final AnimPrefs anims;
+  final UiMode uiMode;
   final Future<void> Function(ThemeMode, SeedTheme?, {bool? dynamic}) onSetTheme;
   final ValueChanged<AnimPrefs> onSetAnims;
-  const App({super.key, required this.repo, required this.mode, required this.onToggleTheme, required this.theme, required this.useDynamic, required this.anims, required this.onSetTheme, required this.onSetAnims});
+  final ValueChanged<UiMode> onSetUiMode;
+  const App({super.key, required this.repo, required this.mode, required this.onToggleTheme, required this.theme, required this.useDynamic, required this.anims, required this.uiMode, required this.onSetTheme, required this.onSetAnims, required this.onSetUiMode});
 
   @override
   State<App> createState() => _AppState();
@@ -143,7 +153,7 @@ class _AppState extends State<App> {
   Widget build(BuildContext context) {
     final video = playing;
     return Stack(children: [
-      VideoListScreen(key: _listKey, repo: widget.repo, mode: widget.mode, onToggleTheme: widget.onToggleTheme, seed: widget.theme, useDynamic: widget.useDynamic, anims: widget.anims, onSetTheme: widget.onSetTheme, onSetAnims: widget.onSetAnims, onPlay: (v) => setState(() => playing = v)),
+      VideoListScreen(key: _listKey, repo: widget.repo, mode: widget.mode, onToggleTheme: widget.onToggleTheme, seed: widget.theme, useDynamic: widget.useDynamic, anims: widget.anims, uiMode: widget.uiMode, onSetTheme: widget.onSetTheme, onSetAnims: widget.onSetAnims, onSetUiMode: widget.onSetUiMode, onPlay: (v) => setState(() => playing = v)),
       AnimatedSwitcher(
         duration: widget.anims.pageOn ? widget.anims.dur(280) : Duration.zero,
         transitionBuilder: (child, animation) => FadeTransition(
