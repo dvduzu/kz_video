@@ -51,6 +51,7 @@ class LocalStore {
   bool get animList => _p.getBool('setting_anim_list') ?? true;
   bool get animCard => _p.getBool('setting_anim_card') ?? true;
   String get animSpeed => _p.getString('setting_anim_speed') ?? 'normal';
+  bool get backgroundPlay => _p.getBool('setting_background_play') ?? true;
 
   Future<void> setGuestMode(bool v) => _p.setBool('guest_mode', v);
   Future<void> setCardOutline(bool v) => _p.setBool('setting_card_outline', v);
@@ -60,6 +61,7 @@ class LocalStore {
   Future<void> setAnimList(bool v) => _p.setBool('setting_anim_list', v);
   Future<void> setAnimCard(bool v) => _p.setBool('setting_anim_card', v);
   Future<void> setAnimSpeed(String v) => _p.setString('setting_anim_speed', v);
+  Future<void> setBackgroundPlay(bool v) => _p.setBool('setting_background_play', v);
   Future<void> setHistoryEnabled(bool v) => _p.setBool('setting_history', v);
   Future<void> setWatchLaterEnabled(bool v) => _p.setBool('setting_watch_later', v);
   Future<void> setMinDuration(int v) => _p.setInt('setting_min_duration', v);

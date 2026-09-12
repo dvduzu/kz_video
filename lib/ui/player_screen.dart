@@ -18,7 +18,7 @@ class PlayerScreen extends StatefulWidget {
   State<PlayerScreen> createState() => _PlayerScreenState();
 }
 
-class _PlayerScreenState extends State<PlayerScreen> {
+class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver {
   late final NativePlayer player;
   String? error;
   bool isLandscape = true;
@@ -43,6 +43,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     super.initState();
     SystemChrome.setPreferredOrientations([DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    WidgetsBinding.instance.addObserver(this);
     player = NativePlayer.instance;
     _listen();
     widget.repo.isWatchLaterEnabled().then((v) { if (mounted) setState(() => watchLaterEnabled = v); });
@@ -219,9 +220,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
     hideTimer?.cancel();
     _toastTimer?.cancel();
     player.stop();
+    WidgetsBinding.instance.removeObserver(this);
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused && !widget.repo.settings.backgroundPlay) {
+      player.pause();
+    }
   }
 
   @override

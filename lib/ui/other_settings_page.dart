@@ -12,6 +12,7 @@ class OtherSettingsPage extends StatefulWidget {
 class _OtherSettingsPageState extends State<OtherSettingsPage> {
   late bool _cardOutline;
   late String _cardTone;
+  late bool _backgroundPlay;
 
   static const _tones = {
     'low': ('surfaceContainerLow', '低'),
@@ -30,12 +31,14 @@ class _OtherSettingsPageState extends State<OtherSettingsPage> {
     final s = widget.repo.settings;
     _cardOutline = s.cardOutline;
     _cardTone = s.cardTone;
+    _backgroundPlay = s.backgroundPlay;
   }
 
   Future<void> _save() async {
     final s = widget.repo.settings;
     await s.setCardOutline(_cardOutline);
     await s.setCardTone(_cardTone);
+    await s.setBackgroundPlay(_backgroundPlay);
   }
 
   @override
@@ -45,6 +48,15 @@ class _OtherSettingsPageState extends State<OtherSettingsPage> {
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         children: [
+          const Text('播放', style: TextStyle(fontWeight: FontWeight.bold)),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('后台播放'),
+            subtitle: const Text('退出应用 / 锁屏后继续播放'),
+            value: _backgroundPlay,
+            onChanged: (v) => setState(() => _backgroundPlay = v),
+          ),
+          const Divider(height: 24),
           const Text('外观细节', style: TextStyle(fontWeight: FontWeight.bold)),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
