@@ -390,7 +390,7 @@ class VideoListScreenState extends State<VideoListScreen> {
       body: Builder(builder: (context) {
         final Widget content = (() {
         if (widget.repo.settings.rid == 'sub') {
-          return SubscriptionScreen(repo: widget.repo, onPlay: widget.onPlay);
+          return SubscriptionScreen(repo: widget.repo, onPlay: widget.onPlay, filterMid: widget.repo.settings.subFilterMid);
         }
         if (loading) return const Center(key: ValueKey('loading'), child: CircularProgressIndicator());
         if (error != null) return Center(key: const ValueKey('error'), child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Text('加载失败：$error'), const SizedBox(height: 12), FilledButton(onPressed: () => _load(force: true), child: const Text('重试'))]));
@@ -621,7 +621,7 @@ class VideoListScreenState extends State<VideoListScreen> {
   void _setSubFilter(int mid) {
     widget.repo.settings.setSubFilterMid(mid);
     _subOffset = 0;
-    _load(force: true);
+    if (mounted) setState(() {});
   }
 
   void _gotoUp(int mid, String name, String bvid) {    Navigator.push(context, MaterialPageRoute(builder: (_) => UpChannelScreen(

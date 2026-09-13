@@ -269,8 +269,7 @@ class FeedService {
 
   Future<List<VideoInfo>> fetchSubscriptionTimeline({void Function(int done, int total)? onProgress}) async {
     final subs = subscriptions.items;
-    final filterMid = settings.subFilterMid;
-    final mids = subs.map((e) => e['mid']).whereType<int>().where((m) => filterMid == 0 || m == filterMid).toList();
+    final mids = subs.map((e) => e['mid']).whereType<int>().toList();
     final seen = <String>{};
     final all = <VideoInfo>[];
     var done = 0;

@@ -7,7 +7,8 @@ import 'video_card.dart';
 class SubscriptionScreen extends StatefulWidget {
   final VideoRepository repo;
   final void Function(VideoInfo) onPlay;
-  const SubscriptionScreen({super.key, required this.repo, required this.onPlay});
+  final int filterMid;
+  const SubscriptionScreen({super.key, required this.repo, required this.onPlay, this.filterMid = 0});
 
   @override
   State<SubscriptionScreen> createState() => _SubscriptionScreenState();
@@ -60,6 +61,8 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     return '${t.month}月${t.day}日 ${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')} 更新';
   }
 
+  List<VideoInfo> get _visible => widget.filterMid == 0 ? _timeline : _timeline.where((v) => v.mid == widget.filterMid).toList();
+
   void _openUp(VideoInfo v) {
     if (v.mid <= 0) return;
     Navigator.push(context, MaterialPageRoute(builder: (_) => UpChannelScreen(
@@ -103,13 +106,13 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
           ]),
         ),
       Expanded(
-        child: _timeline.isEmpty
+        child: _visible.isEmpty
             ? Center(child: Text('还没有内容，点右上角「更新」', style: TextStyle(color: cs.onSurfaceVariant)))
             : ListView.builder(
                 padding: const EdgeInsets.only(top: 8, bottom: 96),
-                itemCount: _timeline.length,
+                itemCount: _visible.length,
                 itemBuilder: (context, i) {
-                  final v = _timeline[i];
+                  final v = _visible[i];
                   return VideoCard(
                     video: v,
                     color: VideoCard.toneColor(context, widget.repo.settings.cardTone),

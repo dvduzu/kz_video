@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:package_info_plus/package_info_plus.dart';
+import 'changelog_page.dart';
 import '../core/logger.dart';
 import '../data/video_repository.dart';
 import 'content_settings_page.dart';
@@ -35,20 +35,8 @@ class _SettingsPageState extends State<SettingsPage> {
     _guestMode = widget.repo.settings.guestMode;
   }
 
-  void _showAbout() {
-    PackageInfo.fromPlatform().then((info) {
-      if (!mounted) return;
-      showDialog(context: context, builder: (ctx) => AlertDialog(
-        title: const Text('关于'),
-        content: Text(
-          'KzVideo\n'
-          '版本：${info.version} (${info.buildNumber})\n'
-          '克制的 B 站视频客户端\n\n'
-          'GitHub：github.com/dvduzu/kz_video'
-        ),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('关闭'))],
-      ));
-    });
+  void _openAbout() {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => const ChangelogPage()));
   }
 
   void _showImportExport() {
@@ -154,6 +142,30 @@ class _SettingsPageState extends State<SettingsPage> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         children: [
           ListTile(
+            leading: Icon(repo.hasAccount ? Icons.account_circle : Icons.login),
+            title: Text(repo.hasAccount ? '登录状态：${repo.loginName}' : '登录'),
+            subtitle: const Text('扫码登录 / Cookie 登录'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => showLoginDialog(context, widget.repo),
+          ),
+          if (repo.hasAccount)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(value: false, label: Text('已登录'), icon: Icon(Icons.person)),
+                  ButtonSegment(value: true, label: Text('游客'), icon: Icon(Icons.visibility_off)),
+                ],
+                selected: {_guestMode},
+                onSelectionChanged: (s) {
+                  setState(() => _guestMode = s.first);
+                  widget.repo.setGuestMode(s.first);
+                  Navigator.pop(context, true);
+                },
+              ),
+            ),
+          const Divider(height: 4),
+          ListTile(
             leading: const Icon(Icons.video_library_outlined),
             title: const Text('内容'),
             subtitle: const Text('分区 / 个性化 / 历史 / 书签 / 订阅 / 黑名单'),
@@ -186,35 +198,11 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           const Divider(height: 4),
           ListTile(
-            leading: Icon(repo.hasAccount ? Icons.account_circle : Icons.login),
-            title: Text(repo.hasAccount ? '登录状态：${repo.loginName}' : '登录'),
-            subtitle: const Text('扫码登录 / Cookie 登录'),
+            leading: const Icon(Icons.history_edu_outlined),
+            title: const Text('关于 / 更新日志'),
+            subtitle: const Text('版本信息 / 各版本更新内容'),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () => showLoginDialog(context, widget.repo),
-          ),
-          if (repo.hasAccount)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: SegmentedButton<bool>(
-                segments: const [
-                  ButtonSegment(value: false, label: Text('已登录'), icon: Icon(Icons.person)),
-                  ButtonSegment(value: true, label: Text('游客'), icon: Icon(Icons.visibility_off)),
-                ],
-                selected: {_guestMode},
-                onSelectionChanged: (s) {
-                  setState(() => _guestMode = s.first);
-                  widget.repo.setGuestMode(s.first);
-                  Navigator.pop(context, true);
-                },
-              ),
-            ),
-          const Divider(height: 4),
-          ListTile(
-            leading: const Icon(Icons.info_outline),
-            title: const Text('关于'),
-            subtitle: const Text('版本信息 / 项目仓库'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: _showAbout,
+            onTap: _openAbout,
           ),
           const SizedBox(height: 16),
         ],
