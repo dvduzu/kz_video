@@ -122,12 +122,6 @@ class _ContentSettingsPageState extends State<ContentSettingsPage> {
           const Divider(height: 24),
           const Text('内容管理', style: TextStyle(fontWeight: FontWeight.bold)),
           ListTile(
-            leading: const Icon(Icons.person_add_alt),
-            title: const Text('订阅管理'),
-            subtitle: const Text('关注 UP 主，推荐会包含他们的新视频'),
-            onTap: widget.onOpenSubscriptions,
-          ),
-          ListTile(
             leading: const Icon(Icons.block),
             title: const Text('管理黑名单'),
             subtitle: const Text('查看/移除已跳过的视频'),

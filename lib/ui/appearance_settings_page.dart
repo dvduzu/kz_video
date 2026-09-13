@@ -7,10 +7,16 @@ class AppearanceSettingsPage extends StatefulWidget {
   final bool useDynamic;
   final AnimPrefs anims;
   final UiMode uiMode;
+  final double dockOpacity;
+  final double dockSize;
+  final bool dockGlass;
+  final bool dockBorder;
+  final bool dockShadow;
   final Future<void> Function(ThemeMode, SeedTheme?, {bool? dynamic}) onSetTheme;
   final ValueChanged<AnimPrefs> onSetAnims;
   final ValueChanged<UiMode> onSetUiMode;
-  const AppearanceSettingsPage({super.key, required this.mode, required this.theme, required this.useDynamic, required this.anims, required this.uiMode, required this.onSetTheme, required this.onSetAnims, required this.onSetUiMode});
+  final void Function(double opacity, double size, bool glass, bool border, bool shadow) onSetDock;
+  const AppearanceSettingsPage({super.key, required this.mode, required this.theme, required this.useDynamic, required this.anims, required this.uiMode, required this.dockOpacity, required this.dockSize, required this.dockGlass, required this.dockBorder, required this.dockShadow, required this.onSetTheme, required this.onSetAnims, required this.onSetUiMode, required this.onSetDock});
 
   @override
   State<AppearanceSettingsPage> createState() => _AppearanceSettingsPageState();
@@ -22,6 +28,11 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
   late bool _useDynamic;
   late AnimPrefs _anims;
   late UiMode _uiMode;
+  late double _dockOpacity;
+  late double _dockSize;
+  late bool _dockGlass;
+  late bool _dockBorder;
+  late bool _dockShadow;
   late final PageController _pageCtrl;
   late final List<List<SeedTheme>> _pages;
 
@@ -33,6 +44,11 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
     _useDynamic = widget.useDynamic;
     _anims = widget.anims;
     _uiMode = widget.uiMode;
+    _dockOpacity = widget.dockOpacity;
+    _dockSize = widget.dockSize;
+    _dockGlass = widget.dockGlass;
+    _dockBorder = widget.dockBorder;
+    _dockShadow = widget.dockShadow;
     _pages = aospThemes.map((t) => t.seed.toARGB32()).toSet().map((c) => aospThemes.where((t) => t.seed.toARGB32() == c).toList()).toList();
     final init = _theme == null ? 0 : _pages.indexWhere((ps) => ps.any((t) => t.key == _theme?.key));
     _pageCtrl = PageController(initialPage: init < 0 ? 0 : init);
@@ -53,6 +69,8 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
     setState(() => _anims = a);
     widget.onSetAnims(a);
   }
+
+  void _pushDock() => widget.onSetDock(_dockOpacity, _dockSize, _dockGlass, _dockBorder, _dockShadow);
 
   void _setUiMode(UiMode m) {
     setState(() => _uiMode = m);
@@ -122,6 +140,48 @@ class _AppearanceSettingsPageState extends State<AppearanceSettingsPage> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
             child: Text('自动按屏幕尺寸判断；平板允许横竖屏', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+          ),
+          const Divider(height: 24),
+          const Text('底部栏', style: TextStyle(fontWeight: FontWeight.bold)),
+          Row(children: [
+            const Text('透明度'),
+            Expanded(child: Slider(
+              value: _dockOpacity,
+              min: 0.1,
+              max: 1.0,
+              divisions: 9,
+              label: '${(_dockOpacity * 100).round()}%',
+              onChanged: (v) { setState(() => _dockOpacity = v); _pushDock(); },
+            )),
+            Text('${(_dockOpacity * 100).round()}%'),
+          ]),
+          Row(children: [
+            const Text('大小'),
+            Expanded(child: Slider(
+              value: _dockSize,
+              min: 0.7,
+              max: 1.6,
+              divisions: 9,
+              label: _dockSize.toStringAsFixed(1),
+              onChanged: (v) { setState(() => _dockSize = v); _pushDock(); },
+            )),
+            Text(_dockSize.toStringAsFixed(1)),
+          ]),
+          SwitchListTile(
+            title: const Text('液态玻璃'),
+            subtitle: const Text('实时模糊，滑动时略耗性能'),
+            value: _dockGlass,
+            onChanged: (v) { setState(() => _dockGlass = v); _pushDock(); },
+          ),
+          SwitchListTile(
+            title: const Text('描边'),
+            value: _dockBorder,
+            onChanged: (v) { setState(() => _dockBorder = v); _pushDock(); },
+          ),
+          SwitchListTile(
+            title: const Text('阴影'),
+            value: _dockShadow,
+            onChanged: (v) { setState(() => _dockShadow = v); _pushDock(); },
           ),
           const Divider(height: 24),
           SwitchListTile(

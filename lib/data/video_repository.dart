@@ -1,20 +1,36 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
-import '../core/logger.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'api/danmaku_api.dart';
+import 'api/play_api.dart';
+import 'api/search_api.dart';
+import 'api/subtitle_api.dart';
+import 'api/user_api.dart';
 import 'auth_repository.dart';
 import 'bilibili_client.dart';
 import 'feed_service.dart';
-import 'local_store.dart';
 import 'models.dart';
+import 'repository/blacklist_repository.dart';
+import 'repository/history_repository.dart';
+import 'repository/playback_repository.dart';
+import 'repository/subscription_repository.dart';
+import 'repository/watch_later_repository.dart';
+import 'store/blacklist_store.dart';
+import 'store/feed_cache_store.dart';
+import 'store/history_store.dart';
+import 'store/playback_store.dart';
+import 'store/settings_store.dart';
+import 'store/subscription_store.dart';
+import 'store/watch_later_store.dart';
 import 'video_api.dart';
 
-// 本文件是 Facade，只做委托和最基础的本地 CRUD。
-// 新的业务规则（判断逻辑、多步骤编排）请写进对应的 XxxRepository/XxxService，
-// 这里只允许出现 "调用某个 service 的方法" 这种单行委托。
+// 本文件是 Facade：委托 api/feed/领域 Repository。
 class VideoRepository {
   static VideoRepository? _instance;
   static VideoRepository instance() => _instance!;
   static void init(VideoRepository repo) => _instance = repo;
+
+  static const int exportSchemaVersion = 2;
 
   bool get isLoggedIn => client.auth.isLoggedIn;
   bool get hasAccount => client.auth.hasAccount;
@@ -22,27 +38,60 @@ class VideoRepository {
   String get loginName => client.auth.loginName;
   int get loginAt => client.auth.loginAt;
   int get sessExpires => client.auth.sessExpires;
-  LocalStore get settings => store;
+
   Future<void> setGuestMode(bool enabled) async {
     await client.auth.setGuestMode(enabled);
-    await store.setGuestMode(enabled);
+    await settings.setGuestMode(enabled);
   }
 
   final BilibiliClient client;
-  final LocalStore store;
+  final SettingsStore settings;
+  final FeedCacheStore feedCache;
   final Dio dio;
   final AuthRepository auth;
+  final PlayApi playApi;
   final VideoApi videoApi;
+  final UserApi userApi;
+  final SearchApi searchApi;
+  final DanmakuApi danmakuApi;
+  final SubtitleApi subtitleApi;
+  final HistoryRepository history;
+  final WatchLaterRepository watchLater;
+  final SubscriptionRepository subscriptions;
+  final BlacklistRepository blacklist;
+  final PlaybackRepository playback;
   late final FeedService feed;
 
-  VideoRepository._(this.client, this.store) : dio = client.dio, auth = AuthRepository(client, store), videoApi = VideoApi(client) {
-    feed = FeedService(client, store, videoApi);
+  VideoRepository._(this.client, this.settings, HistoryStore historyStore, WatchLaterStore watchLaterStore, SubscriptionStore subscriptionStore, BlacklistStore blacklistStore, PlaybackStore playbackStore, this.feedCache)
+      : dio = client.dio,
+        auth = AuthRepository(client, settings),
+        playApi = PlayApi(client),
+        videoApi = VideoApi(client),
+        userApi = UserApi(client),
+        searchApi = SearchApi(client),
+        danmakuApi = DanmakuApi(client),
+        subtitleApi = SubtitleApi(client),
+        history = HistoryRepository(historyStore, settings),
+        watchLater = WatchLaterRepository(watchLaterStore, settings),
+        subscriptions = SubscriptionRepository(subscriptionStore, feedCache),
+        blacklist = BlacklistRepository(blacklistStore),
+        playback = PlaybackRepository(playbackStore) {
+    feed = FeedService(client, videoApi, settings, playbackStore, blacklistStore, subscriptionStore, feedCache);
   }
 
   static Future<VideoRepository> create() async {
     final client = BilibiliClient(BilibiliClient.createDio());
-    final store = await LocalStore.create();
-    return VideoRepository._(client, store);
+    final p = await SharedPreferences.getInstance();
+    return VideoRepository._(
+      client,
+      SettingsStore(p),
+      HistoryStore(p),
+      WatchLaterStore(p),
+      SubscriptionStore(p),
+      BlacklistStore(p),
+      PlaybackStore(p),
+      FeedCacheStore(p),
+    );
   }
 
   Future<({String key, String url})?> webQrGenerate() => auth.webQrGenerate();
@@ -51,150 +100,62 @@ class VideoRepository {
   Future<bool> loginWithCookie(String cookieHeader) => auth.loginWithCookie(cookieHeader);
   Future<void> restoreLogin() => auth.restoreLogin();
   Future<void> logout() => auth.logout();
-  Future<({String videoUrl, String? audioUrl})> getPlayUrl(String bvid, {int? qn}) => videoApi.getPlayUrl(bvid, qn: qn);
-  Future<List<SearchUser>> searchUsers(String keyword) => videoApi.searchUsers(keyword);
-  Future<List<DanmakuItem>> getDanmaku(String bvid, {int durationSec = 0}) => videoApi.getDanmaku(bvid, durationSec: durationSec);
+  Future<({String videoUrl, String? audioUrl})> getPlayUrl(String bvid, {int? qn}) => playApi.getPlayUrl(bvid, qn: qn);
+  Future<List<SearchUser>> searchUsers(String keyword) => searchApi.searchUsers(keyword);
+  Future<List<DanmakuItem>> getDanmaku(String bvid, {int durationSec = 0}) => danmakuApi.getDanmaku(bvid, durationSec: durationSec);
   Future<List<({int mid, String name, String face})>> getVideoStaff(String bvid) => videoApi.getVideoStaff(bvid);
   Future<List<VideoInfo>> getUpVideos(int mid, {int tid = 0, int pn = 1, int cursor = 0}) => videoApi.getUpVideos(mid, tid: tid, pn: pn, cursor: cursor);
-  Future<({String name, String face, int fans, String banner})?> getUserInfo(int mid) => videoApi.getUserInfo(mid);
+  Future<({String name, String face, int fans, String banner})?> getUserInfo(int mid) => userApi.getUserInfo(mid);
   Future<({String name, String face, int fans, String banner})?> getUpInfoByVideo(String bvid) => videoApi.getUpInfoByVideo(bvid);
-  Future<List<SubtitleCue>?> getSubtitles(String bvid) => videoApi.getSubtitles(bvid);
+  Future<List<SubtitleCue>?> getSubtitles(String bvid) => subtitleApi.getSubtitles(bvid);
   Future<List<VideoInfo>> getDailyVideos({bool force = false, int offset = 0}) => feed.getDailyVideos(force: force, offset: offset);
   Future<List<VideoInfo>> getHotVideos({int pn = 1, int limit = 0}) => feed.getHotVideos(pn: pn, limit: limit);
+  Future<List<VideoInfo>> fetchSubscriptionTimeline({void Function(int done, int total)? onProgress}) => feed.fetchSubscriptionTimeline(onProgress: onProgress);
+  List<VideoInfo> cachedSubscriptionTimeline() => feed.cachedSubscriptionTimeline();
+  int? get subscriptionUpdatedAt => feedCache.subUpdatedAt;
 
   String? get buvid3 => client.auth.buvid3;
 
-  Future<void> addBlacklist(VideoInfo v) async {
-    final list = store.blacklist;
-    list.removeWhere((e) => e['bvid'] == v.bvid);
-    list.add(v.toJson());
-    await store.setBlacklist(list);
-  }
-
-  Future<List<VideoInfo>> getBlacklistItems() async {
-    return store.blacklist.map((e) {
-      try { return VideoInfo.fromJson(e); } catch (err) { KzvLogger.debug('parse VideoInfo failed: $err'); return null; }
-    }).whereType<VideoInfo>().toList();
-  }
-
-  Future<void> removeBlacklist(String bvid) async {
-    final list = store.blacklist;
-    list.removeWhere((e) => e['bvid'] == bvid);
-    await store.setBlacklist(list);
-  }
-
-  Future<void> saveProgress(String bvid, int positionMs, int durationMs) async {
-    await store.setProgress(bvid, '$positionMs|$durationMs');
-  }
-
-  Future<({int positionMs, int durationMs})?> getProgress(String bvid) async {
-    final raw = store.getProgress(bvid);
-    if (raw == null) return null;
-    final parts = raw.split('|');
-    if (parts.length != 2) return null;
-    final pos = int.tryParse(parts[0]);
-    final dur = int.tryParse(parts[1]);
-    if (pos == null || dur == null) return null;
-    return (positionMs: pos, durationMs: dur);
-  }
-
-  Future<bool> isHistoryEnabled() async => store.isHistoryEnabled;
-
-  Future<bool> isWatchLaterEnabled() async => store.isWatchLaterEnabled;
-
-  Future<void> addHistory(VideoInfo v) async {
-    if (!await isHistoryEnabled()) return;
-    final list = store.history;
-    list.removeWhere((e) => e['bvid'] == v.bvid);
-    list.insert(0, v.toJson());
-    if (list.length > LocalStore.maxHistoryItems) list.removeRange(LocalStore.maxHistoryItems, list.length);
-    await store.setHistory(list);
-  }
-
-  Future<List<VideoInfo>> getHistory() async {
-    return store.history.map((e) {
-      try { return VideoInfo.fromJson(e); } catch (err) { KzvLogger.debug('parse VideoInfo failed: $err'); return null; }
-    }).whereType<VideoInfo>().toList();
-  }
-
-  Future<void> removeHistory(String bvid) async {
-    final list = store.history;
-    list.removeWhere((e) => e['bvid'] == bvid);
-    await store.setHistory(list);
-  }
-
-  Future<bool> addWatchLater(VideoInfo v) async {
-    if (!await isWatchLaterEnabled()) return false;
-    final list = store.watchLater;
-    if (!list.any((e) => e['bvid'] == v.bvid)) {
-      if (list.length >= LocalStore.maxWatchLaterItems) return false;
-      list.add(v.toJson());
-      await store.setWatchLater(list);
-    }
-    return true;
-  }
-
-  Future<List<VideoInfo>> getWatchLater() async {
-    return store.watchLater.map((e) {
-      try { return VideoInfo.fromJson(e); } catch (err) { KzvLogger.debug('parse VideoInfo failed: $err'); return null; }
-    }).whereType<VideoInfo>().toList();
-  }
-
-  Future<void> removeWatchLater(String bvid) async {
-    final list = store.watchLater;
-    list.removeWhere((e) => e['bvid'] == bvid);
-    await store.setWatchLater(list);
-  }
-
-  Future<bool> addSubscription(int mid, String name, {String face = ''}) async {
-    final list = store.subscriptions;
-    if (list.any((e) => e['mid'] == mid)) return true;
-    if (list.length >= LocalStore.maxSubscriptions) return false;
-    list.add({'mid': mid, 'name': name, 'face': face});
-    await store.setSubscriptions(list);
-    await store.clearDailyCacheFor('sub');
-    return true;
-  }
-
-  Future<bool> isSubscribed(int mid) async => store.subscriptions.any((e) => e['mid'] == mid);
-
-  Future<List<({int mid, String name, String face})>> getSubscriptions() async {
-    return store.subscriptions.map((m) {
-      try {
-        return (mid: m['mid'] as int, name: m['name'] as String? ?? '', face: (m['face'] as String?) ?? '');
-      } catch (err) { KzvLogger.debug('parse subscription failed: $err'); return null; }
-    }).whereType<({int mid, String name, String face})>().toList();
-  }
-
-  Future<void> removeSubscription(int mid) async {
-    final list = store.subscriptions;
-    list.removeWhere((e) => e['mid'] == mid);
-    await store.setSubscriptions(list);
-    await store.clearDailyCacheFor('sub');
-  }
-
-  Future<void> markWatched(String bvid) async {
-    final list = store.watched;
-    if (!list.contains(bvid)) {
-      list.add(bvid);
-      await store.setWatched(list);
-    }
-  }
-
-  Future<Set<String>> getWatchedSet() async => store.watched.toSet();
-
-  Future<void> clearWatched() async {
-    await store.setWatched([]);
-  }
-
-  Future<void> clearDailyCache() => store.clearAllDailyCache();
-
-  Map<String, dynamic> exportData() => store.exportData();
+  Map<String, dynamic> exportData() => {
+        'schemaVersion': exportSchemaVersion,
+        'settings': {
+          'rid': settings.rid,
+          'homeRid': settings.homeRid,
+          'minDuration': settings.minDuration,
+          'minDurationSub': settings.minDurationOf('sub'),
+          'rcmdEnabled': settings.rcmdEnabled,
+          'rcmdBatch': settings.rcmdBatch,
+          'history': settings.isHistoryEnabled,
+          'watchLater': settings.isWatchLaterEnabled,
+          'guestMode': settings.guestMode,
+        },
+        'subscriptions': subscriptions.store.items,
+        'blacklist': blacklist.store.items,
+      };
 
   Future<void> importData(Map<String, dynamic> data) async {
-    await store.importData(data);
-    await client.auth.setGuestMode(store.guestMode);
-    await store.clearAllDailyCache();
+    final schemaVersion = (data['schemaVersion'] as int?) ?? (data['version'] as int?) ?? 1;
+    final migrated = schemaVersion >= exportSchemaVersion ? data : (Map<String, dynamic>.from(data)..['schemaVersion'] = exportSchemaVersion);
+    final s = migrated['settings'] as Map<String, dynamic>?;
+    if (s != null) {
+      if (s['rid'] is String) await settings.setRid(s['rid'] as String);
+      if (s['homeRid'] is String) await settings.setHomeRid(s['homeRid'] as String);
+      if (s['minDuration'] is int) await settings.setMinDuration(s['minDuration'] as int);
+      if (s['minDurationSub'] is int) await settings.setMinDurationOf('sub', s['minDurationSub'] as int);
+      if (s['rcmdEnabled'] is bool) await settings.setRcmdEnabled(s['rcmdEnabled'] as bool);
+      if (s['rcmdBatch'] is int) await settings.setRcmdBatch(s['rcmdBatch'] as int);
+      if (s['history'] is bool) await settings.setHistoryEnabled(s['history'] as bool);
+      if (s['watchLater'] is bool) await settings.setWatchLaterEnabled(s['watchLater'] as bool);
+      if (s['guestMode'] is bool) await settings.setGuestMode(s['guestMode'] as bool);
+    }
+    if (migrated['subscriptions'] is List) {
+      await subscriptions.store.setItems((migrated['subscriptions'] as List).whereType<Map<String, dynamic>>().toList());
+    }
+    if (migrated['blacklist'] is List) {
+      await blacklist.store.setItems((migrated['blacklist'] as List).whereType<Map<String, dynamic>>().toList());
+    }
+    await client.auth.setGuestMode(settings.guestMode);
+    await feedCache.clearAll();
   }
 
   static String _today() {
@@ -203,18 +164,18 @@ class VideoRepository {
   }
 
   Future<bool> canRefreshToday() async {
-    return store.unlimitedRefresh || store.getRefreshCount(_today()) < 5;
+    return feedCache.unlimitedRefresh || feedCache.getRefreshCount(_today()) < 5;
   }
 
-  bool get unlimitedRefresh => store.unlimitedRefresh;
-  Future<void> setUnlimitedRefresh(bool v) => store.setUnlimitedRefresh(v);
+  bool get unlimitedRefresh => feedCache.unlimitedRefresh;
+  Future<void> setUnlimitedRefresh(bool v) => feedCache.setUnlimitedRefresh(v);
 
   Future<void> recordRefresh() async {
     final today = _today();
-    await store.setRefreshCount(today, store.getRefreshCount(today) + 1);
+    await feedCache.setRefreshCount(today, feedCache.getRefreshCount(today) + 1);
   }
 
   Future<void> resetRefreshCount() async {
-    await store.setRefreshCount(_today(), 0);
+    await feedCache.setRefreshCount(_today(), 0);
   }
 }

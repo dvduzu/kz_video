@@ -213,7 +213,8 @@ class DanmakuItem {
   final int mode;
   final int color;
   final String text;
-  const DanmakuItem(this.time, this.mode, this.color, this.text);
+  final int weight;
+  const DanmakuItem(this.time, this.mode, this.color, this.text, [this.weight = 0]);
 }
 
 class VideoInfo {

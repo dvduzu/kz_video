@@ -131,7 +131,9 @@ class _SettingsPageState extends State<SettingsPage> {
         onOpenBlacklist: widget.onOpenBlacklist,
       ),
     ));
-    if (changed == true && mounted) {
+    if (!mounted) return;
+    widget.onAppearanceChanged();
+    if (changed == true) {
       Navigator.pop(context, true);
     }
   }

@@ -35,6 +35,7 @@ abstract final class DanmakuParser {
     var mode = 1;
     var color = 0xFFFFFF;
     var content = '';
+    var weight = 0;
     var i = 0;
     while (i < b.length) {
       final tag = _readVarint(b, i);
@@ -57,6 +58,8 @@ abstract final class DanmakuParser {
           mode = v.$1;
         } else if (field == 5) {
           color = v.$1;
+        } else if (field == 9) {
+          weight = v.$1;
         }
       } else if (wire == 5) {
         i += 4;
@@ -66,7 +69,7 @@ abstract final class DanmakuParser {
         break;
       }
     }
-    return DanmakuItem(progress / 1000.0, mode, color, content);
+    return DanmakuItem(progress / 1000.0, mode, color, content, weight);
   }
 
   static (int, int) _readVarint(List<int> b, int i) {

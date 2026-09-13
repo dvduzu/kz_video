@@ -9,13 +9,15 @@ import '../data/video_repository.dart';
 import '../core/app_orientation.dart';
 import '../core/logger.dart';
 import 'native_video.dart';
+import 'up_channel_screen.dart';
 
 class PlayerScreen extends StatefulWidget {
   final VideoRepository repo;
   final VideoInfo video;
   final VoidCallback onBack;
   final ValueChanged<VideoInfo> onWatched;
-  const PlayerScreen({super.key, required this.repo, required this.video, required this.onBack, required this.onWatched});
+  final ValueChanged<VideoInfo> onPlay;
+  const PlayerScreen({super.key, required this.repo, required this.video, required this.onBack, required this.onWatched, required this.onPlay});
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -31,7 +33,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   bool ready = false;
   bool longPressAccel = false;
   bool watchLaterEnabled = true;
-  bool subscribed = false;
   bool watchLaterAdded = false;
   bool subtitleOn = false;
   List<SubtitleCue>? _subtitleCues;
@@ -45,6 +46,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   double _dmDuration = 8;
   double _dmArea = 0.5;
   bool _dmStroke = true;
+  int _dmWeight = 0;
+  List<DanmakuItem> _danmakuRaw = [];
   DanmakuController<Object?>? _dmController;
   int _dmCursor = 0;
   int _lastPumpMs = 0;
@@ -62,11 +65,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     WidgetsBinding.instance.addObserver(this);
     player = NativePlayer.instance;
     _listen();
-    widget.repo.isWatchLaterEnabled().then((v) { if (mounted) setState(() => watchLaterEnabled = v); });
-    if (widget.video.mid > 0) {
-      widget.repo.isSubscribed(widget.video.mid).then((v) { if (mounted) setState(() => subscribed = v); });
-    }
-    widget.repo.getWatchLater().then((list) {
+    watchLaterEnabled = widget.repo.watchLater.enabled;
+    widget.repo.watchLater.all().then((list) {
       if (mounted) setState(() => watchLaterAdded = list.any((v) => v.bvid == widget.video.bvid));
     });
     _ticker = createTicker((elapsed) {
@@ -83,6 +83,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _dmDuration = ds.danmakuDuration;
     _dmArea = ds.danmakuArea;
     _dmStroke = ds.danmakuStroke;
+    _dmWeight = ds.danmakuWeight;
     _load();
   }
 
@@ -136,7 +137,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       int? resumeMs;
       if (ready) {
         resumeMs = player.state.position.inMilliseconds;
-        await widget.repo.saveProgress(widget.video.bvid, resumeMs, player.state.duration.inMilliseconds);
+        await widget.repo.playback.save(widget.video.bvid, resumeMs, player.state.duration.inMilliseconds);
         await player.stop();
         setState(() => ready = false);
         setState(() { _subtitleCues = null; });
@@ -154,7 +155,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       await player.open(info.videoUrl, audio: info.audioUrl, headers: headers, title: widget.video.title, artist: widget.video.owner, artwork: widget.video.pic);
       KzvLogger.debug('load: open ${DateTime.now().difference(tOpen).inMilliseconds}ms');
       await player.setRate(speed);
-      final seekTarget = resumeMs ?? (await widget.repo.getProgress(widget.video.bvid))?.positionMs;
+      final seekTarget = resumeMs ?? (await widget.repo.playback.get(widget.video.bvid))?.positionMs;
       if (seekTarget != null && seekTarget > 0) {
         for (var i = 0; i < 20 && player.state.duration.inMilliseconds <= 0; i++) {
           await Future<void>.delayed(const Duration(milliseconds: 100));
@@ -164,7 +165,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       await player.play();
       if (mounted) setState(() { ready = true; currentQn = qn; });
       _retryCount = 0;
-      widget.repo.addHistory(widget.video);
+      widget.repo.history.add(widget.video);
       _loadSubtitle();
       _loadDanmaku();
       _startHideTimer();
@@ -184,7 +185,22 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   Future<void> _loadDanmaku() async {
     final list = await widget.repo.getDanmaku(widget.video.bvid, durationSec: widget.video.duration);
     if (!mounted || list.isEmpty) return;
-    setState(() => _danmaku = list);
+    setState(() {
+      _danmakuRaw = list;
+      _danmaku = _applyWeight(list);
+    });
+  }
+
+  List<DanmakuItem> _applyWeight(List<DanmakuItem> list) {
+    if (_dmWeight <= 0) return list;
+    return list.where((d) => d.weight >= _dmWeight).toList();
+  }
+
+  void _reapplyDanmaku() {
+    setState(() => _danmaku = _applyWeight(_danmakuRaw));
+    _dmCursor = 0;
+    _lastPumpMs = 0;
+    _dmController?.clear();
   }
 
   DanmakuItemType _dmType(int mode) {
@@ -200,8 +216,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     duration: _dmDuration,
     opacity: _dmOpacity,
     strokeWidth: _dmStroke ? 1.2 : 0,
+    massiveMode: false,
     safeArea: true,
-    lineHeight: 1.2,
+    lineHeight: 1.6,
   );
 
   void _updateDmOption() {
@@ -212,7 +229,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     final c = _dmController;
     if (c == null || !danmakuOn || _danmaku.isEmpty) return;
     final posMs = _danmakuPos.inMilliseconds;
-    if (posMs < _lastPumpMs - 1000) {
+    if (posMs < _lastPumpMs - 1000 || posMs > _lastPumpMs + 1500) {
       c.clear();
       _dmCursor = 0;
       while (_dmCursor < _danmaku.length && (_danmaku[_dmCursor].time * 1000) <= posMs) {
@@ -326,6 +343,24 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
               },
             )).toList())),
           ]),
+          const SizedBox(height: 4),
+          Row(children: [
+            const Text('智能云屏蔽'),
+            Expanded(child: Slider(
+              value: _dmWeight.toDouble(),
+              min: 0,
+              max: 10,
+              divisions: 10,
+              label: _dmWeight == 0 ? '关闭' : '$_dmWeight 级',
+              onChanged: (v) {
+                setState(() => _dmWeight = v.round());
+                setModalState(() {});
+                s.setDanmakuWeight(v.round());
+                _reapplyDanmaku();
+              },
+            )),
+            Text(_dmWeight == 0 ? '关闭' : '$_dmWeight 级'),
+          ]),
           SwitchListTile(
             title: const Text('描边加粗'),
             subtitle: const Text('复杂画面下更清晰'),
@@ -335,6 +370,17 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         ]),
       ));
     });
+  }
+
+  void _openUpChannel() {
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => UpChannelScreen(
+      repo: widget.repo,
+      mid: widget.video.mid,
+      name: widget.video.owner,
+      bvid: widget.video.bvid,
+      onPlay: widget.onPlay,
+      fromPlayer: true,
+    )));
   }
 
   void _startHideTimer() {
@@ -375,7 +421,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   @override
   void dispose() {
     if (ready) {
-      widget.repo.saveProgress(widget.video.bvid, player.state.position.inMilliseconds, player.state.duration.inMilliseconds);
+      widget.repo.playback.save(widget.video.bvid, player.state.position.inMilliseconds, player.state.duration.inMilliseconds);
     }
     hideTimer?.cancel();
     _toastTimer?.cancel();
@@ -449,13 +495,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
             icon: Icon(watchLaterAdded ? Icons.bookmark : Icons.bookmark_add_outlined, color: watchLaterAdded ? Theme.of(context).colorScheme.primary : Colors.white),
             onPressed: () async {
               if (watchLaterAdded) {
-                await widget.repo.removeWatchLater(widget.video.bvid);
+                await widget.repo.watchLater.remove(widget.video.bvid);
                 if (mounted) {
                   setState(() => watchLaterAdded = false);
                   _toast('已取消收藏');
                 }
               } else {
-                final ok = await widget.repo.addWatchLater(widget.video);
+                final ok = await widget.repo.watchLater.add(widget.video);
                 if (mounted) {
                   if (ok) {
                     setState(() => watchLaterAdded = true);
@@ -470,27 +516,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         : null;
     final upBtn = widget.video.mid > 0
         ? IconButton(
-            tooltip: subscribed ? '已关注' : '关注UP',
-            icon: Icon(subscribed ? Icons.person : Icons.person_add_alt, color: subscribed ? Theme.of(context).colorScheme.primary : Colors.white),
-            onPressed: () async {
-              if (subscribed) {
-                await widget.repo.removeSubscription(widget.video.mid);
-                if (mounted) {
-                  setState(() => subscribed = false);
-                  _toast('已取消关注');
-                }
-                return;
-              }
-              final ok = await widget.repo.addSubscription(widget.video.mid, widget.video.owner);
-              if (mounted) {
-                if (ok) {
-                  setState(() => subscribed = true);
-                  _toast('已关注 ${widget.video.owner}');
-                } else {
-                  _toast('订阅已满 50 人，请到设置→订阅管理移除一个', ms: 2000);
-                }
-              }
-            },
+            tooltip: 'UP主页',
+            icon: const Icon(Icons.account_circle_outlined, color: Colors.white),
+            onPressed: _openUpChannel,
           )
         : null;
     final fullBtn = IconButton(icon: const Icon(Icons.fullscreen, color: Colors.white), onPressed: _toggleOrientation);

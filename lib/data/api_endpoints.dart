@@ -16,6 +16,7 @@ abstract final class ApiEndpoints {
   static const genWebTicket = 'https://api.bilibili.com/bapis/bilibili.api.ticket.v1.Ticket/GenWebTicket';
   static const danmakuSeg = 'https://api.bilibili.com/x/v2/dm/web/seg.so';
   static const spaceArchiveCursor = 'https://app.bilibili.com/x/v2/space/archive/cursor';
+  static const space = 'https://app.bilibili.com/x/v2/space';
   static const qrGenerate = 'https://passport.bilibili.com/x/passport-login/web/qrcode/generate';
   static const qrPoll = 'https://passport.bilibili.com/x/passport-login/web/qrcode/poll';
   static const webNav = 'https://api.bilibili.com/x/web-interface/nav';

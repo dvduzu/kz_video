@@ -1,6 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:kz_video/data/local_store.dart';
+import 'package:kz_video/data/store/settings_store.dart';
+import 'package:kz_video/data/store/feed_cache_store.dart';
+import 'package:kz_video/data/store/playback_store.dart';
+import 'package:kz_video/data/store/subscription_store.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -9,40 +12,39 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  test('export includes schemaVersion and import round trips', () async {
-    final store = await LocalStore.create();
-    await store.setSubscriptions([{'mid': 1, 'name': 'u', 'face': ''}]);
-    await store.setRid('hot');
-    final data = store.exportData();
-    expect(data['schemaVersion'], LocalStore.exportSchemaVersion);
-
-    final store2 = await LocalStore.create();
-    await store2.importData(data);
-    expect(store2.rid, 'hot');
-    expect(store2.subscriptions, hasLength(1));
+  test('settings store defaults and setters', () async {
+    final p = await SharedPreferences.getInstance();
+    final s = SettingsStore(p);
+    expect(s.rid, '');
+    expect(s.recommendCountOf('hot'), 0);
+    expect(s.recommendCountOf('tech'), 10);
+    await s.setRid('hot');
+    await s.setRecommendCountOf('hot', 25);
+    expect(s.rid, 'hot');
+    expect(s.recommendCountOf('hot'), 25);
   });
 
-  test('imports a v1 backup without schemaVersion', () async {
-    final store = await LocalStore.create();
-    await store.importData({
-      'version': 1,
-      'settings': {'rid': 'tech', 'minDuration': 600},
-    });
-    expect(store.rid, 'tech');
-    expect(store.minDuration, 600);
+  test('playback store progress round trips', () async {
+    final p = await SharedPreferences.getInstance();
+    final s = PlaybackStore(p);
+    await s.setProgress('BV1', '1200|6000');
+    expect(s.getProgress('BV1'), '1200|6000');
+    await s.setWatched(['BV1']);
+    expect(s.watched, contains('BV1'));
   });
 
-  test('playback progress round trips', () async {
-    final store = await LocalStore.create();
-    await store.setProgress('BV1', '1200|6000');
-    expect(store.getProgress('BV1'), '1200|6000');
+  test('subscription store round trips', () async {
+    final p = await SharedPreferences.getInstance();
+    final s = SubscriptionStore(p);
+    await s.setItems([{'mid': 1, 'name': 'u', 'face': ''}]);
+    expect(s.items, hasLength(1));
   });
 
-  test('recommendCount defaults: hot unlimited, others ten', () async {
-    final store = await LocalStore.create();
-    expect(store.recommendCountOf('hot'), 0);
-    expect(store.recommendCountOf('tech'), 10);
-    await store.setRecommendCountOf('hot', 25);
-    expect(store.recommendCountOf('hot'), 25);
+  test('feed cache refresh count', () async {
+    final p = await SharedPreferences.getInstance();
+    final s = FeedCacheStore(p);
+    expect(s.getRefreshCount('2026-09-13'), 0);
+    await s.setRefreshCount('2026-09-13', 3);
+    expect(s.getRefreshCount('2026-09-13'), 3);
   });
 }

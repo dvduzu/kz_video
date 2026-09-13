@@ -165,7 +165,7 @@ class _AppState extends State<App> {
         ),
         child: video == null
             ? const SizedBox.shrink(key: ValueKey('no-player'))
-            : PlayerScreen(key: ValueKey('player-${video.bvid}'), repo: widget.repo, video: video, onBack: () => setState(() => playing = null), onWatched: (v) => _listKey.currentState?.markWatched(v)),
+            : PlayerScreen(key: ValueKey('player-${video.bvid}'), repo: widget.repo, video: video, onBack: () => setState(() => playing = null), onWatched: (v) => _listKey.currentState?.markWatched(v), onPlay: (v) => setState(() => playing = v)),
       ),
     ]);
   }

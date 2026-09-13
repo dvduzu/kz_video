@@ -1,5 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../core/app_orientation.dart';
 import '../core/logger.dart';
 import '../data/models.dart';
 import '../data/video_repository.dart';
@@ -10,7 +12,8 @@ class UpChannelScreen extends StatefulWidget {
   final String name;
   final String bvid;
   final void Function(VideoInfo) onPlay;
-  const UpChannelScreen({super.key, required this.repo, required this.mid, required this.name, required this.bvid, required this.onPlay});
+  final bool fromPlayer;
+  const UpChannelScreen({super.key, required this.repo, required this.mid, required this.name, required this.bvid, required this.onPlay, this.fromPlayer = false});
 
   @override
   State<UpChannelScreen> createState() => _UpChannelScreenState();
@@ -22,6 +25,7 @@ class _UpChannelScreenState extends State<UpChannelScreen> {
   String _face = '';
   String _banner = '';
   int _fans = 0;
+  bool _subscribed = false;
   int _pn = 1;
   int _cursor = 0;
   bool _loading = false;
@@ -30,7 +34,9 @@ class _UpChannelScreenState extends State<UpChannelScreen> {
   @override
   void initState() {
     super.initState();
+    AppOrientation.apply(widget.repo.settings.uiModeMode);
     _loadUser();
+    _loadSubscribed();
     _loadMore();
     _scroll.addListener(() {
       if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 400) _loadMore();
@@ -40,12 +46,17 @@ class _UpChannelScreenState extends State<UpChannelScreen> {
   @override
   void dispose() {
     _scroll.dispose();
+    if (widget.fromPlayer) {
+      SystemChrome.setPreferredOrientations(const [DeviceOrientation.landscapeLeft]);
+    } else {
+      AppOrientation.apply(widget.repo.settings.uiModeMode);
+    }
     super.dispose();
   }
 
   Future<void> _loadUser() async {
     try {
-      final subs = await widget.repo.getSubscriptions();
+      final subs = await widget.repo.subscriptions.all();
       for (final s in subs) {
         if (s.mid == widget.mid && s.face.isNotEmpty) {
           if (mounted) setState(() => _face = _normalizeFace(s.face));
@@ -68,6 +79,26 @@ class _UpChannelScreenState extends State<UpChannelScreen> {
       if (info.banner.isNotEmpty) _banner = info.banner;
       _fans = info.fans;
     });
+  }
+
+  Future<void> _loadSubscribed() async {
+    final v = await widget.repo.subscriptions.contains(widget.mid);
+    if (mounted) setState(() => _subscribed = v);
+  }
+
+  Future<void> _toggleSubscribed() async {
+    if (_subscribed) {
+      await widget.repo.subscriptions.remove(widget.mid);
+      if (mounted) setState(() => _subscribed = false);
+      return;
+    }
+    final ok = await widget.repo.subscriptions.add(widget.mid, widget.name);
+    if (!mounted) return;
+    if (ok) {
+      setState(() => _subscribed = true);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('订阅已满 50 人')));
+    }
   }
 
   String _normalizeFace(String f) {
@@ -162,6 +193,11 @@ class _UpChannelScreenState extends State<UpChannelScreen> {
                           Text(widget.name, style: Theme.of(context).textTheme.titleMedium, maxLines: 1, overflow: TextOverflow.ellipsis),
                           if (_fans > 0) Text('${_count(_fans)} 粉丝', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
                         ])),
+                        const SizedBox(width: 8),
+                        FilledButton(
+                          onPressed: _toggleSubscribed,
+                          child: Text(_subscribed ? '已关注' : '关注'),
+                        ),
                       ]),
                     ),
                   ]),

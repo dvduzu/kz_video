@@ -3,16 +3,16 @@ import 'package:dio/dio.dart';
 import 'bilibili_client.dart';
 import 'api_endpoints.dart';
 import 'credential_store.dart';
-import 'local_store.dart';
+import 'store/settings_store.dart';
 import '../core/logger.dart';
 
 class AuthRepository {
   final BilibiliClient client;
-  final LocalStore store;
+  final SettingsStore settings;
   final CredentialStore credentials;
   final Dio dio;
 
-  AuthRepository(this.client, this.store)
+  AuthRepository(this.client, this.settings)
       : credentials = CredentialStore(),
         dio = client.dio;
 
@@ -140,7 +140,7 @@ class AuthRepository {
     if (saved != null && saved.isNotEmpty) {
       await loginWithCookie(saved);
     }
-    await client.auth.setGuestMode(store.guestMode);
+    await client.auth.setGuestMode(settings.guestMode);
   }
 
   Future<void> logout() async {

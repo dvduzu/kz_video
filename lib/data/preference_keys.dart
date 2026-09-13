@@ -29,12 +29,20 @@ abstract final class PreferenceKeys {
   static const settingDmDuration = 'setting_dm_duration';
   static const settingDmArea = 'setting_dm_area';
   static const settingDmStroke = 'setting_dm_stroke';
+  static const settingDmWeight = 'setting_dm_weight';
 
   static const themeMode = 'theme_mode';
   static const themeSeed = 'theme_seed';
   static const dynamicColor = 'dynamic_color';
   static const uiMode = 'ui_mode';
+  static const dockOpacity = 'dock_opacity';
+  static const dockSize = 'dock_size';
+  static const dockGlass = 'dock_glass';
+  static const dockBorder = 'dock_border';
+  static const dockShadow = 'dock_shadow';
   static const debugUnlimitedRefresh = 'debug_unlimited_refresh';
+  static const subTimeline = 'sub_timeline';
+  static const subUpdatedAt = 'sub_updated_at';
   static const dailyCachePrefix = 'daily_';
 
   static String recommendCount(String rid) => 'setting_recommend_count_$rid';

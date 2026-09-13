@@ -3,15 +3,23 @@ import 'dart:math';
 import 'package:dio/dio.dart';
 import 'bilibili_client.dart';
 import 'api_endpoints.dart';
-import 'local_store.dart';
 import 'models.dart';
 import 'video_api.dart';
+import 'store/blacklist_store.dart';
+import 'store/feed_cache_store.dart';
+import 'store/playback_store.dart';
+import 'store/settings_store.dart';
+import 'store/subscription_store.dart';
 import '../core/logger.dart';
 
 class FeedService {
   final BilibiliClient client;
-  final LocalStore store;
   final VideoApi videoApi;
+  final SettingsStore settings;
+  final PlaybackStore playback;
+  final BlacklistStore blacklist;
+  final SubscriptionStore subscriptions;
+  final FeedCacheStore feedCache;
   final Dio dio;
 
   static const int cacheValidMs = 6 * 3600 * 1000;
@@ -20,7 +28,7 @@ class FeedService {
   static const int popularPickLimit = 40;
   static const int rcmdMaxItems = 60;
 
-  FeedService(this.client, this.store, this.videoApi) : dio = client.dio;
+  FeedService(this.client, this.videoApi, this.settings, this.playback, this.blacklist, this.subscriptions, this.feedCache) : dio = client.dio;
 
   int _ridMain(String key) {
     return switch (key) {
@@ -39,8 +47,8 @@ class FeedService {
     return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
   }
 
-  Future<Set<String>> _getBlacklistSet() async {
-    return store.blacklist.map((e) => e['bvid'] as String? ?? '').where((s) => s.isNotEmpty).toSet();
+  Set<String> _blacklistSet() {
+    return blacklist.items.map((e) => e['bvid'] as String? ?? '').where((s) => s.isNotEmpty).toSet();
   }
 
   List<VideoInfo> _parseVideoList(List<dynamic> list) {
@@ -88,11 +96,11 @@ class FeedService {
   Future<List<VideoInfo>> getHotVideos({int pn = 1, int limit = 0}) async {
     try {
       final data = await client.wbiGet(ApiEndpoints.popular, {'pn': pn, 'ps': 30});
-      final minDuration = store.minDurationOf('hot');
-      final blacklist = await _getBlacklistSet();
-      final watched = store.watched.toSet();
+      final minDuration = settings.minDurationOf('hot');
+      final blacklistSet = _blacklistSet();
+      final watched = playback.watched.toSet();
       var list = _parseVideoList(data['data']?['list'] as List? ?? [])
-          .where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid) && !watched.contains(v.bvid))
+          .where((v) => v.duration >= minDuration && !blacklistSet.contains(v.bvid) && !watched.contains(v.bvid))
           .toList();
       if (limit > 0 && list.length > limit) list = list.sublist(0, limit);
       return list;
@@ -104,7 +112,7 @@ class FeedService {
 
   Future<List<VideoInfo>> _fetchPopular() async {
     final all = <VideoInfo>[];
-    for (var pn = 1; pn <= 8; pn++) {
+    for (var pn = 1; pn <= 12; pn++) {
       try {
         final data = await client.wbiGet(ApiEndpoints.popular, {'pn': pn, 'ps': 30});
         all.addAll(_parseVideoList(data['data']?['list'] as List? ?? []));
@@ -125,15 +133,31 @@ class FeedService {
     }
   }
 
-  Future<List<VideoInfo>> _fetchSubVideos(int ridMain, {int perUp = 30}) async {
-    final subs = await store.subscriptions;
-    final filterMid = store.subFilterMid;
+  Future<List<VideoInfo>> _fetchSubVideos(int ridMain, {int want = 30}) async {
+    final subs = subscriptions.items;
+    final filterMid = settings.subFilterMid;
+    final seen = <String>{};
     final all = <VideoInfo>[];
     for (final sub in subs) {
       final mid = sub['mid'];
-      if (mid is int && (filterMid == 0 || mid == filterMid)) {
-        final upVideos = await videoApi.getUpVideos(mid, tid: ridMain);
-        all.addAll(upVideos.take(perUp));
+      if (mid is! int || (filterMid != 0 && mid != filterMid)) continue;
+      var pn = 1;
+      var cursor = 0;
+      var fetched = 0;
+      while (fetched < want) {
+        final page = await videoApi.getUpVideos(mid, tid: ridMain, pn: pn, cursor: cursor);
+        if (page.isEmpty) break;
+        var added = 0;
+        for (final v in page) {
+          if (seen.add(v.bvid)) {
+            all.add(v);
+            added++;
+          }
+        }
+        fetched += page.length;
+        cursor = page.last.aid;
+        pn++;
+        if (added == 0) break;
       }
     }
     return all;
@@ -161,23 +185,23 @@ class FeedService {
   }
 
   Future<List<VideoInfo>> getDailyVideos({bool force = false, int offset = 0}) async {
-    final ridKey = store.rid;
-    final minDuration = store.minDurationOf(ridKey);
-    final count = store.recommendCountOf(ridKey);
+    final ridKey = settings.rid;
+    final minDuration = settings.minDurationOf(ridKey);
+    final count = settings.recommendCountOf(ridKey);
     final ridMain = _ridMain(ridKey);
     final today = _today();
     final key = ridKey == 'sub' ? 'daily_${ridKey}_${today}_o$offset' : 'daily_${ridKey}_$today';
     final tsKey = ridKey == 'sub' ? 'daily_ts_${ridKey}_${today}_o$offset' : 'daily_ts_${ridKey}_$today';
     final now = DateTime.now().millisecondsSinceEpoch;
-    final blacklist = await _getBlacklistSet();
-    final watched = store.watched.toSet();
+    final blacklistSet = _blacklistSet();
+    final watched = playback.watched.toSet();
     if (!force) {
-      final cachedTs = store.getDailyTs(tsKey);
-      final cached = store.getDailyCache(key);
+      final cachedTs = feedCache.getDailyTs(tsKey);
+      final cached = feedCache.getDailyCache(key);
       if (cached != null && cachedTs != null && (now - cachedTs) < cacheValidMs) {
         try {
           final list = (jsonDecode(cached) as List).map((e) => VideoInfo.fromJson(e as Map<String, dynamic>))
-            .where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid) && !watched.contains(v.bvid)).toList();
+            .where((v) => v.duration >= minDuration && !blacklistSet.contains(v.bvid) && !watched.contains(v.bvid)).toList();
           if (list.isNotEmpty) return list;
         } catch (e) {
           KzvLogger.debug('daily cache parse failed: $e');
@@ -185,27 +209,28 @@ class FeedService {
       }
     }
     if (ridKey != 'sub') {
-      final rcmdOn = store.rcmdEnabled;
+      final rcmdOn = settings.rcmdEnabled;
       if (rcmdOn && ridKey == '') {
-        final batch = store.rcmdBatch;
+        final batch = settings.rcmdBatch;
         final rcmdVideos = await _getRcmdVideos(batch: batch);
-        final rcmdFiltered = rcmdVideos.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid) && !watched.contains(v.bvid)).toList();
+        final rcmdFiltered = rcmdVideos.where((v) => v.duration >= minDuration && !blacklistSet.contains(v.bvid) && !watched.contains(v.bvid)).toList();
         KzvLogger.debug('rcmd raw=${rcmdVideos.length} filtered=$minDuration→${rcmdFiltered.length}');
         if (rcmdFiltered.isNotEmpty) {
-          final picked = rcmdFiltered.take(rcmdPickLimit).toList()..shuffle(Random());
+          final rcmdPool = count > rcmdPickLimit ? count * 2 : rcmdPickLimit;
+          final picked = rcmdFiltered.take(rcmdPool).toList()..shuffle(Random());
           final chosen = picked.take(count).toList();
           KzvLogger.debug('daily(rcmd) min=$minDuration items=${rcmdFiltered.length} chosen=${chosen.length}');
           if (chosen.isNotEmpty) {
-            await store.setDailyCache(key, jsonEncode(chosen.map((e) => e.toJson()).toList()));
-            await store.setDailyTs(tsKey, now);
+            await feedCache.setDailyCache(key, jsonEncode(chosen.map((e) => e.toJson()).toList()));
+            await feedCache.setDailyTs(tsKey, now);
           }
           return chosen;
         }
       }
     }
     if (ridKey == 'sub') {
-      final subVideos = await _fetchSubVideos(ridMain);
-      final subFiltered = subVideos.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid) && !watched.contains(v.bvid)).toList();
+      final subVideos = await _fetchSubVideos(ridMain, want: count * 3);
+      final subFiltered = subVideos.where((v) => v.duration >= minDuration && !blacklistSet.contains(v.bvid) && !watched.contains(v.bvid)).toList();
       final interleaved = _interleaveByUp(subFiltered);
       var chosen = interleaved.skip(offset).take(count).toList();
       if (chosen.isEmpty && offset > 0) {
@@ -213,31 +238,67 @@ class FeedService {
       }
       KzvLogger.debug('daily(sub) min=$minDuration sub=${subFiltered.length} interleaved=${interleaved.length} offset=$offset chosen=${chosen.length}');
       if (chosen.isNotEmpty) {
-        await store.setDailyCache(key, jsonEncode(chosen.map((e) => e.toJson()).toList()));
-        await store.setDailyTs(tsKey, now);
+        await feedCache.setDailyCache(key, jsonEncode(chosen.map((e) => e.toJson()).toList()));
+        await feedCache.setDailyTs(tsKey, now);
       }
       return chosen;
     }
     final List<VideoInfo> popular = ridMain == 0 ? await _fetchPopular() : await _fetchRanking(ridMain);
     if (ridKey == 'hot') {
-      final filtered = popular.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid) && !watched.contains(v.bvid)).toList();
+      final filtered = popular.where((v) => v.duration >= minDuration && !blacklistSet.contains(v.bvid) && !watched.contains(v.bvid)).toList();
       final chosen = filtered.take(count).toList();
       KzvLogger.debug('daily(hot) min=$minDuration popular=${filtered.length} chosen=${chosen.length}');
       if (chosen.isNotEmpty) {
-        await store.setDailyCache(key, jsonEncode(chosen.map((e) => e.toJson()).toList()));
-        await store.setDailyTs(tsKey, now);
+        await feedCache.setDailyCache(key, jsonEncode(chosen.map((e) => e.toJson()).toList()));
+        await feedCache.setDailyTs(tsKey, now);
       }
       return chosen;
     }
-    final popularFiltered = popular.where((v) => v.duration >= minDuration && !blacklist.contains(v.bvid) && !watched.contains(v.bvid)).toList()
+    final popularFiltered = popular.where((v) => v.duration >= minDuration && !blacklistSet.contains(v.bvid) && !watched.contains(v.bvid)).toList()
       ..sort((a, b) => b.pubdate.compareTo(a.pubdate));
-    final picked = popularFiltered.take(popularPickLimit).toList()..shuffle(Random());
+    final poolLimit = count > popularPickLimit ? count * 2 : popularPickLimit;
+    final picked = popularFiltered.take(poolLimit).toList()..shuffle(Random());
     final chosen = picked.take(count).toList();
     KzvLogger.debug('daily min=$minDuration popular=${popularFiltered.length} chosen=${chosen.length}');
     if (chosen.isNotEmpty) {
-      await store.setDailyCache(key, jsonEncode(chosen.map((e) => e.toJson()).toList()));
-      await store.setDailyTs(tsKey, now);
+      await feedCache.setDailyCache(key, jsonEncode(chosen.map((e) => e.toJson()).toList()));
+      await feedCache.setDailyTs(tsKey, now);
     }
     return chosen;
+  }
+
+  Future<List<VideoInfo>> fetchSubscriptionTimeline({void Function(int done, int total)? onProgress}) async {
+    final subs = subscriptions.items;
+    final filterMid = settings.subFilterMid;
+    final mids = subs.map((e) => e['mid']).whereType<int>().where((m) => filterMid == 0 || m == filterMid).toList();
+    final seen = <String>{};
+    final all = <VideoInfo>[];
+    var done = 0;
+    for (final mid in mids) {
+      try {
+        final page = await videoApi.getUpVideos(mid);
+        for (final v in page) {
+          if (seen.add(v.bvid)) all.add(v);
+        }
+      } catch (e) {
+        KzvLogger.debug('sub timeline mid=$mid failed: $e');
+      }
+      done++;
+      onProgress?.call(done, mids.length);
+    }
+    all.sort((a, b) => b.pubdate.compareTo(a.pubdate));
+    await feedCache.setSubTimeline(jsonEncode(all.map((e) => e.toJson()).toList()));
+    await feedCache.setSubUpdatedAt(DateTime.now().millisecondsSinceEpoch);
+    return all;
+  }
+
+  List<VideoInfo> cachedSubscriptionTimeline() {
+    final raw = feedCache.subTimeline;
+    if (raw == null) return [];
+    try {
+      return (jsonDecode(raw) as List).map((e) => VideoInfo.fromJson(e as Map<String, dynamic>)).toList();
+    } catch (_) {
+      return [];
+    }
   }
 }
