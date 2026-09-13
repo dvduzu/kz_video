@@ -30,7 +30,7 @@ class VideoRepository {
   static VideoRepository instance() => _instance!;
   static void init(VideoRepository repo) => _instance = repo;
 
-  static const int exportSchemaVersion = 2;
+  static const int exportSchemaVersion = 3;
 
   bool get isLoggedIn => client.auth.isLoggedIn;
   bool get hasAccount => client.auth.hasAccount;
@@ -119,42 +119,25 @@ class VideoRepository {
 
   Map<String, dynamic> exportData() => {
         'schemaVersion': exportSchemaVersion,
-        'settings': {
-          'rid': settings.rid,
-          'homeRid': settings.homeRid,
-          'minDuration': settings.minDuration,
-          'minDurationSub': settings.minDurationOf('sub'),
-          'rcmdEnabled': settings.rcmdEnabled,
-          'rcmdBatch': settings.rcmdBatch,
-          'history': settings.isHistoryEnabled,
-          'watchLater': settings.isWatchLaterEnabled,
-          'guestMode': settings.guestMode,
-        },
+        'settings': settings.toJson(),
         'subscriptions': subscriptions.store.items,
         'blacklist': blacklist.store.items,
+        'history': history.store.items,
+        'watchLater': watchLater.store.items,
       };
 
   Future<void> importData(Map<String, dynamic> data) async {
     final schemaVersion = (data['schemaVersion'] as int?) ?? (data['version'] as int?) ?? 1;
     final migrated = schemaVersion >= exportSchemaVersion ? data : (Map<String, dynamic>.from(data)..['schemaVersion'] = exportSchemaVersion);
-    final s = migrated['settings'] as Map<String, dynamic>?;
-    if (s != null) {
-      if (s['rid'] is String) await settings.setRid(s['rid'] as String);
-      if (s['homeRid'] is String) await settings.setHomeRid(s['homeRid'] as String);
-      if (s['minDuration'] is int) await settings.setMinDuration(s['minDuration'] as int);
-      if (s['minDurationSub'] is int) await settings.setMinDurationOf('sub', s['minDurationSub'] as int);
-      if (s['rcmdEnabled'] is bool) await settings.setRcmdEnabled(s['rcmdEnabled'] as bool);
-      if (s['rcmdBatch'] is int) await settings.setRcmdBatch(s['rcmdBatch'] as int);
-      if (s['history'] is bool) await settings.setHistoryEnabled(s['history'] as bool);
-      if (s['watchLater'] is bool) await settings.setWatchLaterEnabled(s['watchLater'] as bool);
-      if (s['guestMode'] is bool) await settings.setGuestMode(s['guestMode'] as bool);
+    final s = migrated['settings'];
+    if (s is Map<String, dynamic>) {
+      await settings.apply(s);
     }
-    if (migrated['subscriptions'] is List) {
-      await subscriptions.store.setItems((migrated['subscriptions'] as List).whereType<Map<String, dynamic>>().toList());
-    }
-    if (migrated['blacklist'] is List) {
-      await blacklist.store.setItems((migrated['blacklist'] as List).whereType<Map<String, dynamic>>().toList());
-    }
+    List<Map<String, dynamic>> asList(Object? v) => v is List ? v.whereType<Map<String, dynamic>>().toList() : const [];
+    if (migrated['subscriptions'] is List) await subscriptions.store.setItems(asList(migrated['subscriptions']));
+    if (migrated['blacklist'] is List) await blacklist.store.setItems(asList(migrated['blacklist']));
+    if (migrated['history'] is List) await history.store.setItems(asList(migrated['history']));
+    if (migrated['watchLater'] is List) await watchLater.store.setItems(asList(migrated['watchLater']));
     await client.auth.setGuestMode(settings.guestMode);
     await feedCache.clearAll();
   }

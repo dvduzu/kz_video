@@ -20,6 +20,11 @@ class _ChangelogPageState extends State<ChangelogPage> {
   }
 
   static const List<({String version, String date, List<String> items})> _logs = [
+    (version: '0.4.0-pre2', date: '2026-09-13', items: [
+      'Release 构建改用正式签名；清理 debug 入口与刷新限次死代码',
+      '订阅：修复按 UP 筛选；已读按天灰化（可开关）；自动更新支持间隔',
+      '播放器：手势水平拖动进度 + 时间浮层（进度条拖动同样显示）',
+    ]),
     (version: '0.4.0-pre1', date: '2026-09-13', items: [
       '订阅分区改为时间线：去重后按发布时间倒序，新增「更新」按钮、上次更新时间与进度',
       '新增全局底部 Dock（所有分区），左右滑动或点击切换到订阅管理',
