@@ -9,11 +9,6 @@ class FeedCacheStore extends StoreBase {
   Future<void> setDailyCache(String key, String v) => p.setString(key, v);
   Future<void> setDailyTs(String key, int v) => p.setInt(key, v);
 
-  int getRefreshCount(String today) => p.getInt(PreferenceKeys.refreshCount(today)) ?? 0;
-  Future<void> setRefreshCount(String today, int v) => p.setInt(PreferenceKeys.refreshCount(today), v);
-  bool get unlimitedRefresh => p.getBool(PreferenceKeys.debugUnlimitedRefresh) ?? false;
-  Future<void> setUnlimitedRefresh(bool v) => p.setBool(PreferenceKeys.debugUnlimitedRefresh, v);
-
   String? get subTimeline => p.getString(PreferenceKeys.subTimeline);
   Future<void> setSubTimeline(String v) => p.setString(PreferenceKeys.subTimeline, v);
   int? get subUpdatedAt => p.getInt(PreferenceKeys.subUpdatedAt);

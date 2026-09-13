@@ -51,6 +51,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   DanmakuController<Object?>? _dmController;
   int _dmCursor = 0;
   int _lastPumpMs = 0;
+  Duration? _seekPreview;
+  Duration _dragBase = Duration.zero;
+  double _dragAccum = 0;
   DateTime? _loadT0;
   late final Ticker _ticker;
   Duration _lastTick = Duration.zero;
@@ -411,6 +414,27 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     });
   }
 
+  void _onSeekDragStart() {
+    _dragBase = player.state.position;
+    _dragAccum = 0;
+    setState(() => _seekPreview = _dragBase);
+  }
+
+  void _onSeekDragUpdate(DragUpdateDetails d, double width) {
+    final durMs = player.state.duration.inMilliseconds;
+    if (durMs <= 0 || width <= 0) return;
+    _dragAccum += d.delta.dx;
+    final deltaMs = (_dragAccum / width) * durMs;
+    final newMs = (_dragBase.inMilliseconds + deltaMs).clamp(0, durMs).round();
+    setState(() => _seekPreview = Duration(milliseconds: newMs));
+  }
+
+  void _onSeekDragEnd() {
+    final target = _seekPreview;
+    if (target != null) player.seek(target);
+    setState(() => _seekPreview = null);
+  }
+
   String _format(Duration d) {
     final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
     final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
@@ -500,17 +524,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   setState(() => watchLaterAdded = false);
                   _toast('已取消收藏');
                 }
-              } else {
-                final ok = await widget.repo.watchLater.add(widget.video);
-                if (mounted) {
-                  if (ok) {
-                    setState(() => watchLaterAdded = true);
-                    _toast('已加入收藏');
-                  } else {
-                    _toast('收藏已满 50');
-                  }
-                }
-              }
+                    } else {
+                      await widget.repo.watchLater.add(widget.video);
+                      if (mounted) {
+                        setState(() => watchLaterAdded = true);
+                        _toast('已加入收藏');
+                      }
+                    }
             },
           )
         : null;
@@ -522,7 +542,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
           )
         : null;
     final fullBtn = IconButton(icon: const Icon(Icons.fullscreen, color: Colors.white), onPressed: _toggleOrientation);
-    final progressBar = _ProgressBar(player: player, position: position, duration: duration, onInteract: _startHideTimer);
+    final progressBar = _ProgressBar(player: player, position: position, duration: duration, onInteract: _startHideTimer, onPreview: (d) => setState(() => _seekPreview = d));
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -548,6 +568,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
               player.setRate(speed);
               if (mounted) setState(() => longPressAccel = false);
             },
+            onHorizontalDragStart: (_) => _onSeekDragStart(),
+            onHorizontalDragUpdate: (d) => _onSeekDragUpdate(d, MediaQuery.of(context).size.width),
+            onHorizontalDragEnd: (_) => _onSeekDragEnd(),
           )),
           AnimatedOpacity(
             opacity: showControls ? 0.4 : 0,
@@ -617,6 +640,16 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                       child: const Text('2x 加速中', style: TextStyle(color: Colors.white, fontSize: 14)),
                     ),
                   ),
+                ),
+              ),
+            ),
+          if (_seekPreview != null)
+            IgnorePointer(
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(10)),
+                  child: Text('${_format(_seekPreview!)} / ${_format(duration)}', style: const TextStyle(color: Colors.white, fontSize: 14)),
                 ),
               ),
             ),
@@ -707,7 +740,8 @@ class _ProgressBar extends StatefulWidget {
   final Duration position;
   final Duration duration;
   final VoidCallback onInteract;
-  const _ProgressBar({required this.player, required this.position, required this.duration, required this.onInteract});
+  final ValueChanged<Duration?>? onPreview;
+  const _ProgressBar({required this.player, required this.position, required this.duration, required this.onInteract, this.onPreview});
   @override
   State<_ProgressBar> createState() => _ProgressBarState();
 }
@@ -735,12 +769,13 @@ class _ProgressBarState extends State<_ProgressBar> {
               max: max <= 0 ? 1.0 : max,
               activeColor: Theme.of(context).colorScheme.primary,
               inactiveColor: Colors.white24,
-              onChangeStart: (v) { setState(() => _dragMs = v); widget.onInteract(); },
-              onChanged: (v) { setState(() => _dragMs = v); widget.onInteract(); },
+              onChangeStart: (v) { setState(() => _dragMs = v); widget.onInteract(); widget.onPreview?.call(Duration(milliseconds: v.round())); },
+              onChanged: (v) { setState(() => _dragMs = v); widget.onInteract(); widget.onPreview?.call(Duration(milliseconds: v.round())); },
               onChangeEnd: (v) {
                 widget.player.seek(Duration(milliseconds: v.round()));
                 setState(() => _dragMs = null);
                 widget.onInteract();
+                widget.onPreview?.call(null);
               },
             ),
           ),

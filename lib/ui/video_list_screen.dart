@@ -36,11 +36,9 @@ class VideoListScreenState extends State<VideoListScreen> {
   String? error;
   bool loading = true;
   bool editing = false;
-  int _titleTaps = 0;
   final Set<String> _watched = {};
   final Set<String> _fading = {};
   final Set<String> selected = {};
-  int _subOffset = 0;
   bool _showManager = false;
   final _pageCtrl = PageController();
 
@@ -67,6 +65,7 @@ class VideoListScreenState extends State<VideoListScreen> {
   @override
   void initState() {
     super.initState();
+    _watched.addAll(widget.repo.playback.watched);
     _load();
     _scrollCtrl.addListener(() {
       if (widget.repo.settings.rid != 'hot') return;
@@ -103,57 +102,20 @@ class VideoListScreenState extends State<VideoListScreen> {
   void _markWatched(VideoInfo v) {
     widget.repo.playback.markWatched(v.bvid);
     setState(() {
-      _fading.add(v.bvid);
       _watched.add(v.bvid);
+      _fading.remove(v.bvid);
     });
-    Future<void>.delayed(const Duration(milliseconds: 400), () {
-      if (!mounted) return;      setState(() {
-        videos?.removeWhere((x) => x.bvid == v.bvid);
-        _fading.remove(v.bvid);
-      });
-    });
-  }
-
-  Future<void> _markSelectedWatched() async {
-    final list = (videos ?? []).where((e) => selected.contains(e.bvid)).toList();
-    for (final v in list) {
-      _markWatched(v);
-    }
-    if (mounted) {
-      setState(() { selected.clear(); editing = false; });
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已标记 ${list.length} 个看完')));
-    }
-  }
-
-  Future<void> _onTitleTap() async {
-    _titleTaps++;
-    if (_titleTaps >= 10) {
-      _titleTaps = 0;
-      final unlimited = !widget.repo.unlimitedRefresh;
-      await widget.repo.setUnlimitedRefresh(unlimited);
-      if (mounted) {
-        setState(() {});
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(unlimited ? 'debug' : 'release')));
-      }
-    }
   }
 
   Future<void> _onRefresh() async {
-    if (!await widget.repo.canRefreshToday()) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('今天已结束，明天再来')));
-      return;
-    }
-    await widget.repo.recordRefresh();
-    await widget.repo.playback.clearWatched();
-    _watched.clear();
-    _fading.clear();
-    if (widget.repo.settings.rid == 'sub') {
-      _subOffset += 10;
-    }
     await _load(force: true);
   }
 
   Future<void> _load({bool force = false}) async {
+    if (widget.repo.settings.rid == 'sub') {
+      setState(() { loading = false; });
+      return;
+    }
     setState(() { loading = true; error = null; });
     try {
       if (widget.repo.settings.rid == 'hot') {
@@ -168,8 +130,7 @@ class VideoListScreenState extends State<VideoListScreen> {
         });
         return;
       }
-      final offset = widget.repo.settings.rid == 'sub' ? _subOffset : 0;
-      final list = await widget.repo.getDailyVideos(force: force, offset: offset);
+      final list = await widget.repo.getDailyVideos(force: force);
       setState(() { videos = list; loading = false; });
     } catch (e) {
       KzvLogger.debug('load error: $e');
@@ -224,32 +185,39 @@ class VideoListScreenState extends State<VideoListScreen> {
           },
         ))).toList()),
       const Divider(height: 16),
-      Row(children: [
-        const Text('长视频时长'),
-        const SizedBox(width: 8),
-        Expanded(child: Slider(
-          value: _minToSubIndex(selMin).toDouble(),
-          min: 0,
-          max: 3,
-          divisions: 3,
-          label: selMin == 0 ? '不限' : '${(selMin / 60).round()} 分钟',
-          onChanged: (v) => setSheet(() => selMin = _subIndexToMin(v.round())),
-        )),
-        Text(selMin == 0 ? '不限' : '${(selMin / 60).round()} 分钟'),
-      ]),
-      Row(children: [
-        const Text('推荐数量'),
-        const SizedBox(width: 8),
-        Expanded(child: Slider(
-          value: selCount.toDouble().clamp((selRid == 'hot' ? 0 : 10).toDouble(), 50),
-          min: (selRid == 'hot' ? 0 : 10).toDouble(),
-          max: 50,
-          divisions: selRid == 'hot' ? 10 : 8,
-          label: selCount == 0 ? '不限' : '$selCount 条',
-          onChanged: (v) => setSheet(() => selCount = v.round()),
-        )),
-        Text(selCount == 0 ? '不限' : '$selCount 条'),
-      ]),
+      if (selRid == 'sub')
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Text('订阅为时间线：全量、按发布时间倒序，无需数量/时长设置', style: Theme.of(ctx).textTheme.bodySmall),
+        )
+      else ...[
+        Row(children: [
+          const Text('长视频时长'),
+          const SizedBox(width: 8),
+          Expanded(child: Slider(
+            value: _minToSubIndex(selMin).toDouble(),
+            min: 0,
+            max: 3,
+            divisions: 3,
+            label: selMin == 0 ? '不限' : '${(selMin / 60).round()} 分钟',
+            onChanged: (v) => setSheet(() => selMin = _subIndexToMin(v.round())),
+          )),
+          Text(selMin == 0 ? '不限' : '${(selMin / 60).round()} 分钟'),
+        ]),
+        Row(children: [
+          const Text('推荐数量'),
+          const SizedBox(width: 8),
+          Expanded(child: Slider(
+            value: selCount.toDouble().clamp((selRid == 'hot' ? 0 : 10).toDouble(), 50),
+            min: (selRid == 'hot' ? 0 : 10).toDouble(),
+            max: 50,
+            divisions: selRid == 'hot' ? 10 : 8,
+            label: selCount == 0 ? '不限' : '$selCount 条',
+            onChanged: (v) => setSheet(() => selCount = v.round()),
+          )),
+          Text(selCount == 0 ? '不限' : '$selCount 条'),
+        ]),
+      ],
       ]),
       actions: [
         FilledButton(
@@ -265,9 +233,6 @@ class VideoListScreenState extends State<VideoListScreen> {
             widget.repo.settings.setMinDurationOf(selRid, selMin);
             widget.repo.settings.setRecommendCountOf(selRid, selCount);
             Navigator.pop(ctx);
-            if (ridChanged) {
-              _subOffset = 0;
-            }
             if (minChanged || countChanged) {
               widget.repo.feedCache.clearFor(selRid);
               _load(force: true);
@@ -308,6 +273,7 @@ class VideoListScreenState extends State<VideoListScreen> {
       selected: isSelected,
       editing: editing,
       fading: _fading.contains(v.bvid),
+      dimmed: widget.repo.settings.dimWatched && _watched.contains(v.bvid),
       animDuration: _dur(400),
       cardDuration: _cardDur(220),
       onTap: () {
@@ -339,10 +305,7 @@ class VideoListScreenState extends State<VideoListScreen> {
                     const Icon(Icons.arrow_drop_down, size: 20),
                   ]),
                 ),
-                GestureDetector(
-                  onTap: _onTitleTap,
-                  child: Text(' ${_today()}'),
-                ),
+                Text(' ${_today()}'),
                 if (widget.repo.settings.rid == 'sub')
                   GestureDetector(
                     onTap: _pickSubFilter,
@@ -368,18 +331,12 @@ class VideoListScreenState extends State<VideoListScreen> {
                   label: Text((videos ?? const []).isNotEmpty && selected.length == videos!.length ? '取消全选' : '全选'),
                 ),
                 TextButton.icon(
-                  onPressed: selected.isEmpty ? null : _markSelectedWatched,
-                  icon: const Icon(Icons.done_all),
-                  label: const Text('标记看完'),
-                ),
-                TextButton.icon(
                   onPressed: selected.isEmpty ? null : _skipSelected,
                   icon: const Icon(Icons.block),
                   label: const Text('跳过'),
                 ),
               ]
             : [
-                IconButton(icon: const Icon(Icons.done_all), tooltip: '标记看完', onPressed: () => setState(() => editing = true)),
                 if (widget.repo.settings.isHistoryEnabled)
                   IconButton(icon: const Icon(Icons.history), tooltip: '历史', onPressed: _showHistory),
                 if (widget.repo.settings.isWatchLaterEnabled)
@@ -398,24 +355,9 @@ class VideoListScreenState extends State<VideoListScreen> {
         if (list.isEmpty) return Center(key: const ValueKey('empty'), child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
           const Text('¯\\_(ツ)_/¯', style: TextStyle(fontSize: 28)),
           const SizedBox(height: 16),
-          FilledButton.tonalIcon(
-            onPressed: _onRefresh,
-            icon: const Icon(Icons.refresh, size: 18),
-            label: const Text('换一批'),
-          ),
+          Text('下拉刷新看看', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
         ]));
         return Column(key: const ValueKey('list'), children: [
-          Align(
-            alignment: Alignment.centerRight,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-              child: FilledButton.tonalIcon(
-                onPressed: _onRefresh,
-                icon: const Icon(Icons.refresh, size: 18),
-                label: const Text('换一批'),
-              ),
-            ),
-          ),
           Expanded(
             child: RefreshIndicator(
               onRefresh: _onRefresh,
@@ -620,7 +562,6 @@ class VideoListScreenState extends State<VideoListScreen> {
 
   void _setSubFilter(int mid) {
     widget.repo.settings.setSubFilterMid(mid);
-    _subOffset = 0;
     if (mounted) setState(() {});
   }
 
@@ -695,7 +636,6 @@ class VideoListScreenState extends State<VideoListScreen> {
       setState(() {});
     }
     if (ridChanged) {
-      _subOffset = 0;
       await _load(force: false);
     } else if (changed == true || accountChanged) {
       await _load(force: true);

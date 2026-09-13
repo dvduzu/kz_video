@@ -2,6 +2,7 @@ abstract final class ApiEndpoints {
   static const view = '/x/web-interface/view';
   static const playUrl = '/x/player/wbi/playurl';
   static const playV2 = '/x/player/wbi/v2';
+  static const videoShot = '/x/player/videoshot';
   static const nav = '/x/web-interface/nav';
   static const popular = '/x/web-interface/popular';
   static const ranking = '/x/web-interface/ranking/v2';

@@ -4,6 +4,7 @@ abstract final class PreferenceKeys {
   static const watchLater = 'watch_later';
   static const subscriptions = 'subscriptions';
   static const watched = 'watched';
+  static const watchedDate = 'watched_date';
   static const guestMode = 'guest_mode';
 
   static const settingHistory = 'setting_history';
@@ -30,6 +31,7 @@ abstract final class PreferenceKeys {
   static const settingDmArea = 'setting_dm_area';
   static const settingDmStroke = 'setting_dm_stroke';
   static const settingDmWeight = 'setting_dm_weight';
+  static const settingDimWatched = 'setting_dim_watched';
 
   static const themeMode = 'theme_mode';
   static const themeSeed = 'theme_seed';
@@ -40,14 +42,13 @@ abstract final class PreferenceKeys {
   static const dockGlass = 'dock_glass';
   static const dockBorder = 'dock_border';
   static const dockShadow = 'dock_shadow';
-  static const debugUnlimitedRefresh = 'debug_unlimited_refresh';
   static const subTimeline = 'sub_timeline';
   static const subUpdatedAt = 'sub_updated_at';
+  static const subAutoUpdate = 'sub_auto_update';
   static const dailyCachePrefix = 'daily_';
 
   static String recommendCount(String rid) => 'setting_recommend_count_$rid';
   static String progress(String bvid) => 'progress_$bvid';
-  static String refreshCount(String today) => 'refresh_count_$today';
   static String daily(String rid, String today) => 'daily_${rid}_$today';
   static String dailyTs(String rid, String today) => 'daily_ts_${rid}_$today';
 }

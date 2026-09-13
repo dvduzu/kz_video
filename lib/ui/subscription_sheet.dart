@@ -62,24 +62,15 @@ class _SubscriptionSheetState extends State<SubscriptionSheet> with AutomaticKee
   }
 
   void _follow(int mid, String uname, String face) async {
-    final ok = await widget.repo.subscriptions.add(mid, uname, face: face);
+    await widget.repo.subscriptions.add(mid, uname, face: face);
     if (!mounted) return;
-    if (ok) {
-      setState(() { followed.insert(0, (mid: mid, name: uname, face: face)); });
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('已关注 $uname'),
-        duration: const Duration(milliseconds: 1500),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      ));
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: const Text('订阅已满 50 人'),
-        duration: const Duration(milliseconds: 1500),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      ));
-    }
+    setState(() { followed.insert(0, (mid: mid, name: uname, face: face)); });
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('已关注 $uname'),
+      duration: const Duration(milliseconds: 1500),
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+    ));
   }
 
   String _face(String f) {
@@ -101,7 +92,7 @@ class _SubscriptionSheetState extends State<SubscriptionSheet> with AutomaticKee
   Widget build(BuildContext context) {
     super.build(context);
     return DefaultTabController(length: 2, child: Builder(builder: (ctx) => Column(children: [
-          ListTile(leading: const Icon(Icons.person_add_alt), title: Text('订阅管理 (${followed.length}/50)', style: Theme.of(ctx).textTheme.titleMedium)),
+          ListTile(leading: const Icon(Icons.person_add_alt), title: Text('已关注 ${followed.length} 位', style: Theme.of(ctx).textTheme.titleMedium)),
           TabBar(
             onTap: (i) => setState(() => tabIndex = i),
             tabs: const [Tab(text: '已关注'), Tab(text: '添加UP')],

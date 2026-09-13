@@ -10,6 +10,7 @@ class VideoCard extends StatelessWidget {
   final bool selected;
   final bool editing;
   final bool fading;
+  final bool dimmed;
   final Duration animDuration;
   final Duration cardDuration;
   final VoidCallback? onTap;
@@ -23,6 +24,7 @@ class VideoCard extends StatelessWidget {
     this.selected = false,
     this.editing = false,
     this.fading = false,
+    this.dimmed = false,
     this.animDuration = Duration.zero,
     this.cardDuration = Duration.zero,
     this.onTap,
@@ -54,11 +56,11 @@ class VideoCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final meta = _meta(video);
     return AnimatedSize(
-      duration: animDuration,
+      duration: fading ? animDuration : Duration.zero,
       curve: Curves.easeInOut,
       child: AnimatedOpacity(
         duration: animDuration,
-        opacity: fading ? 0 : 1,
+        opacity: fading ? 0 : (dimmed ? 0.4 : 1),
         child: AnimatedContainer(
           duration: cardDuration,
           curve: Curves.easeOut,

@@ -14,7 +14,6 @@ class WatchLaterRepository {
     if (!enabled) return false;
     final list = store.items;
     if (!list.any((e) => e['bvid'] == v.bvid)) {
-      if (list.length >= WatchLaterStore.maxItems) return false;
       list.add(v.toJson());
       await store.setItems(list);
     }

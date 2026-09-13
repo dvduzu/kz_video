@@ -10,7 +10,6 @@ class SubscriptionRepository {
   Future<bool> add(int mid, String name, {String face = ''}) async {
     final list = store.items;
     if (list.any((e) => e['mid'] == mid)) return true;
-    if (list.length >= SubscriptionStore.maxItems) return false;
     list.add({'mid': mid, 'name': name, 'face': face});
     await store.setItems(list);
     await feedCache.clearFor('sub');

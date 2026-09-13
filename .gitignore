@@ -53,3 +53,8 @@ app.*.map.json
 .envrc
 flake.lock
 flake.nix
+
+# Android signing
+android/key.properties
+*.jks
+*.keystore

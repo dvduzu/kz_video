@@ -92,13 +92,9 @@ class _UpChannelScreenState extends State<UpChannelScreen> {
       if (mounted) setState(() => _subscribed = false);
       return;
     }
-    final ok = await widget.repo.subscriptions.add(widget.mid, widget.name);
+    await widget.repo.subscriptions.add(widget.mid, widget.name);
     if (!mounted) return;
-    if (ok) {
-      setState(() => _subscribed = true);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('订阅已满 50 人')));
-    }
+    setState(() => _subscribed = true);
   }
 
   String _normalizeFace(String f) {

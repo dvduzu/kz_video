@@ -40,11 +40,11 @@ void main() {
     expect(s.items, hasLength(1));
   });
 
-  test('feed cache refresh count', () async {
+  test('feed cache sub timeline round trips', () async {
     final p = await SharedPreferences.getInstance();
     final s = FeedCacheStore(p);
-    expect(s.getRefreshCount('2026-09-13'), 0);
-    await s.setRefreshCount('2026-09-13', 3);
-    expect(s.getRefreshCount('2026-09-13'), 3);
+    expect(s.subTimeline, isNull);
+    await s.setSubTimeline('[]');
+    expect(s.subTimeline, '[]');
   });
 }

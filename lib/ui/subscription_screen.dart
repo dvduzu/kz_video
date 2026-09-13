@@ -16,6 +16,7 @@ class SubscriptionScreen extends StatefulWidget {
 
 class _SubscriptionScreenState extends State<SubscriptionScreen> {
   List<VideoInfo> _timeline = [];
+  Set<String> _watched = {};
   bool _updating = false;
   int _done = 0;
   int _total = 0;
@@ -26,6 +27,15 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     super.initState();
     _timeline = widget.repo.cachedSubscriptionTimeline();
     _updatedAt = widget.repo.subscriptionUpdatedAt;
+    _watched = widget.repo.playback.watched.toSet();
+    final mode = widget.repo.settings.subAutoUpdate;
+    if (mode != 'manual' && mode != 'startup') {
+      final intervalMs = (int.tryParse(mode) ?? 60) * 60 * 1000;
+      final updatedAt = _updatedAt;
+      if (updatedAt == null || DateTime.now().millisecondsSinceEpoch - updatedAt >= intervalMs) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _update());
+      }
+    }
   }
 
   Future<void> _update() async {
@@ -43,6 +53,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         setState(() {
           _timeline = list;
           _updatedAt = widget.repo.subscriptionUpdatedAt;
+          _watched = widget.repo.playback.watched.toSet();
         });
       }
     } finally {
@@ -117,6 +128,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                     video: v,
                     color: VideoCard.toneColor(context, widget.repo.settings.cardTone),
                     outline: widget.repo.settings.cardOutline,
+                    dimmed: widget.repo.settings.dimWatched && _watched.contains(v.bvid),
                     onTap: () => widget.onPlay(v),
                     onOwnerTap: () => _openUp(v),
                   );

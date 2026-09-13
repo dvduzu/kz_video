@@ -1,5 +1,8 @@
+import 'package:dio/dio.dart';
 import '../api_exception.dart';
 import '../api_endpoints.dart';
+import '../models.dart';
+import '../../core/logger.dart';
 import 'api_base.dart';
 
 class PlayApi extends ApiBase {
@@ -52,6 +55,27 @@ class PlayApi extends ApiBase {
       }
     }
     throw BilibiliApiException('获取播放地址失败：${errors.join(' | ')}', path: ApiEndpoints.playUrl);
+  }
+
+  Future<VideoShot?> getVideoShot(String bvid) async {
+    try {
+      final view = await wbiGet(ApiEndpoints.view, {'bvid': bvid});
+      final cid = view['data']?['cid'];
+      if (cid == null) return null;
+      final resp = await dio.get(ApiEndpoints.videoShot, queryParameters: {'bvid': bvid, 'cid': cid, 'index': 1}, options: Options(headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Referer': 'https://www.bilibili.com/video/$bvid',
+      }));
+      final body = resp.data as Map<String, dynamic>;
+      if (body['code'] != 0) return null;
+      final data = body['data'] as Map<String, dynamic>?;
+      if (data == null) return null;
+      final shot = VideoShot.fromJson(data);
+      return shot.images.isEmpty || shot.index.isEmpty ? null : shot;
+    } catch (e) {
+      KzvLogger.debug('getVideoShot failed: $e');
+      return null;
+    }
   }
 
   String? _pickStreamUrl(Map<String, dynamic> track) {

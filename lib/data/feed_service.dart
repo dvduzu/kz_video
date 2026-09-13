@@ -98,9 +98,8 @@ class FeedService {
       final data = await client.wbiGet(ApiEndpoints.popular, {'pn': pn, 'ps': 30});
       final minDuration = settings.minDurationOf('hot');
       final blacklistSet = _blacklistSet();
-      final watched = playback.watched.toSet();
       var list = _parseVideoList(data['data']?['list'] as List? ?? [])
-          .where((v) => v.duration >= minDuration && !blacklistSet.contains(v.bvid) && !watched.contains(v.bvid))
+          .where((v) => v.duration >= minDuration && !blacklistSet.contains(v.bvid))
           .toList();
       if (limit > 0 && list.length > limit) list = list.sublist(0, limit);
       return list;
@@ -133,119 +132,49 @@ class FeedService {
     }
   }
 
-  Future<List<VideoInfo>> _fetchSubVideos(int ridMain, {int want = 30}) async {
-    final subs = subscriptions.items;
-    final filterMid = settings.subFilterMid;
-    final seen = <String>{};
-    final all = <VideoInfo>[];
-    for (final sub in subs) {
-      final mid = sub['mid'];
-      if (mid is! int || (filterMid != 0 && mid != filterMid)) continue;
-      var pn = 1;
-      var cursor = 0;
-      var fetched = 0;
-      while (fetched < want) {
-        final page = await videoApi.getUpVideos(mid, tid: ridMain, pn: pn, cursor: cursor);
-        if (page.isEmpty) break;
-        var added = 0;
-        for (final v in page) {
-          if (seen.add(v.bvid)) {
-            all.add(v);
-            added++;
-          }
-        }
-        fetched += page.length;
-        cursor = page.last.aid;
-        pn++;
-        if (added == 0) break;
-      }
-    }
-    return all;
-  }
-
-  List<VideoInfo> _interleaveByUp(List<VideoInfo> videos) {
-    final byUp = <int, List<VideoInfo>>{};
-    for (final v in videos) {
-      byUp.putIfAbsent(v.mid, () => []).add(v);
-    }
-    for (final list in byUp.values) {
-      list.sort((a, b) => b.pubdate.compareTo(a.pubdate));
-    }
-    final upIds = byUp.keys.toList()..shuffle(Random());
-    final picked = <VideoInfo>[];
-    var round = 0;
-    while (upIds.any((id) => round < byUp[id]!.length)) {
-      for (final id in upIds) {
-        final list = byUp[id]!;
-        if (round < list.length) picked.add(list[round]);
-      }
-      round++;
-    }
-    return picked;
-  }
-
-  Future<List<VideoInfo>> getDailyVideos({bool force = false, int offset = 0}) async {
+  Future<List<VideoInfo>> getDailyVideos({bool force = false}) async {
     final ridKey = settings.rid;
     final minDuration = settings.minDurationOf(ridKey);
     final count = settings.recommendCountOf(ridKey);
     final ridMain = _ridMain(ridKey);
     final today = _today();
-    final key = ridKey == 'sub' ? 'daily_${ridKey}_${today}_o$offset' : 'daily_${ridKey}_$today';
-    final tsKey = ridKey == 'sub' ? 'daily_ts_${ridKey}_${today}_o$offset' : 'daily_ts_${ridKey}_$today';
+    final key = 'daily_${ridKey}_$today';
+    final tsKey = 'daily_ts_${ridKey}_$today';
     final now = DateTime.now().millisecondsSinceEpoch;
     final blacklistSet = _blacklistSet();
-    final watched = playback.watched.toSet();
     if (!force) {
       final cachedTs = feedCache.getDailyTs(tsKey);
       final cached = feedCache.getDailyCache(key);
       if (cached != null && cachedTs != null && (now - cachedTs) < cacheValidMs) {
         try {
           final list = (jsonDecode(cached) as List).map((e) => VideoInfo.fromJson(e as Map<String, dynamic>))
-            .where((v) => v.duration >= minDuration && !blacklistSet.contains(v.bvid) && !watched.contains(v.bvid)).toList();
+            .where((v) => v.duration >= minDuration && !blacklistSet.contains(v.bvid)).toList();
           if (list.isNotEmpty) return list;
         } catch (e) {
           KzvLogger.debug('daily cache parse failed: $e');
         }
       }
     }
-    if (ridKey != 'sub') {
-      final rcmdOn = settings.rcmdEnabled;
-      if (rcmdOn && ridKey == '') {
-        final batch = settings.rcmdBatch;
-        final rcmdVideos = await _getRcmdVideos(batch: batch);
-        final rcmdFiltered = rcmdVideos.where((v) => v.duration >= minDuration && !blacklistSet.contains(v.bvid) && !watched.contains(v.bvid)).toList();
-        KzvLogger.debug('rcmd raw=${rcmdVideos.length} filtered=$minDuration→${rcmdFiltered.length}');
-        if (rcmdFiltered.isNotEmpty) {
-          final rcmdPool = count > rcmdPickLimit ? count * 2 : rcmdPickLimit;
-          final picked = rcmdFiltered.take(rcmdPool).toList()..shuffle(Random());
-          final chosen = picked.take(count).toList();
-          KzvLogger.debug('daily(rcmd) min=$minDuration items=${rcmdFiltered.length} chosen=${chosen.length}');
-          if (chosen.isNotEmpty) {
-            await feedCache.setDailyCache(key, jsonEncode(chosen.map((e) => e.toJson()).toList()));
-            await feedCache.setDailyTs(tsKey, now);
-          }
-          return chosen;
+    if (settings.rcmdEnabled && ridKey == '') {
+      final batch = settings.rcmdBatch;
+      final rcmdVideos = await _getRcmdVideos(batch: batch);
+      final rcmdFiltered = rcmdVideos.where((v) => v.duration >= minDuration && !blacklistSet.contains(v.bvid)).toList();
+      KzvLogger.debug('rcmd raw=${rcmdVideos.length} filtered=$minDuration→${rcmdFiltered.length}');
+      if (rcmdFiltered.isNotEmpty) {
+        final rcmdPool = count > rcmdPickLimit ? count * 2 : rcmdPickLimit;
+        final picked = rcmdFiltered.take(rcmdPool).toList()..shuffle(Random());
+        final chosen = picked.take(count).toList();
+        KzvLogger.debug('daily(rcmd) min=$minDuration items=${rcmdFiltered.length} chosen=${chosen.length}');
+        if (chosen.isNotEmpty) {
+          await feedCache.setDailyCache(key, jsonEncode(chosen.map((e) => e.toJson()).toList()));
+          await feedCache.setDailyTs(tsKey, now);
         }
+        return chosen;
       }
-    }
-    if (ridKey == 'sub') {
-      final subVideos = await _fetchSubVideos(ridMain, want: count * 3);
-      final subFiltered = subVideos.where((v) => v.duration >= minDuration && !blacklistSet.contains(v.bvid) && !watched.contains(v.bvid)).toList();
-      final interleaved = _interleaveByUp(subFiltered);
-      var chosen = interleaved.skip(offset).take(count).toList();
-      if (chosen.isEmpty && offset > 0) {
-        chosen = interleaved.take(count).toList();
-      }
-      KzvLogger.debug('daily(sub) min=$minDuration sub=${subFiltered.length} interleaved=${interleaved.length} offset=$offset chosen=${chosen.length}');
-      if (chosen.isNotEmpty) {
-        await feedCache.setDailyCache(key, jsonEncode(chosen.map((e) => e.toJson()).toList()));
-        await feedCache.setDailyTs(tsKey, now);
-      }
-      return chosen;
     }
     final List<VideoInfo> popular = ridMain == 0 ? await _fetchPopular() : await _fetchRanking(ridMain);
     if (ridKey == 'hot') {
-      final filtered = popular.where((v) => v.duration >= minDuration && !blacklistSet.contains(v.bvid) && !watched.contains(v.bvid)).toList();
+      final filtered = popular.where((v) => v.duration >= minDuration && !blacklistSet.contains(v.bvid)).toList();
       final chosen = filtered.take(count).toList();
       KzvLogger.debug('daily(hot) min=$minDuration popular=${filtered.length} chosen=${chosen.length}');
       if (chosen.isNotEmpty) {
@@ -254,7 +183,7 @@ class FeedService {
       }
       return chosen;
     }
-    final popularFiltered = popular.where((v) => v.duration >= minDuration && !blacklistSet.contains(v.bvid) && !watched.contains(v.bvid)).toList()
+    final popularFiltered = popular.where((v) => v.duration >= minDuration && !blacklistSet.contains(v.bvid)).toList()
       ..sort((a, b) => b.pubdate.compareTo(a.pubdate));
     final poolLimit = count > popularPickLimit ? count * 2 : popularPickLimit;
     final picked = popularFiltered.take(poolLimit).toList()..shuffle(Random());

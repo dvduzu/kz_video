@@ -18,6 +18,8 @@ class _ContentSettingsPageState extends State<ContentSettingsPage> {
   late bool _watchLater;
   late bool _rcmdEnabled;
   late int _rcmdBatch;
+  late String _subAutoUpdate;
+  late bool _dimWatched;
   late String _oldRid;
   late String _oldHomeRid;
   late bool _oldRcmdEnabled;
@@ -40,6 +42,8 @@ class _ContentSettingsPageState extends State<ContentSettingsPage> {
       _watchLater = s.isWatchLaterEnabled;
       _rcmdEnabled = s.rcmdEnabled;
       _rcmdBatch = s.rcmdBatch;
+      _subAutoUpdate = s.subAutoUpdate;
+      _dimWatched = s.dimWatched;
       _oldRid = s.rid;
       _oldHomeRid = s.homeRid;
       _oldRcmdEnabled = s.rcmdEnabled;
@@ -59,6 +63,8 @@ class _ContentSettingsPageState extends State<ContentSettingsPage> {
     await s.setWatchLaterEnabled(_watchLater);
     await s.setRcmdEnabled(_rcmdEnabled);
     await s.setRcmdBatch(_rcmdBatch);
+    await s.setSubAutoUpdate(_subAutoUpdate);
+    await s.setDimWatched(_dimWatched);
     return changed;
   }
 
@@ -120,7 +126,34 @@ class _ContentSettingsPageState extends State<ContentSettingsPage> {
               ],
             ),
           const Divider(height: 24),
+          const Text('订阅', style: TextStyle(fontWeight: FontWeight.bold)),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('自动更新', style: TextStyle(fontSize: 13)),
+              const SizedBox(height: 8),
+              Wrap(spacing: 8, children: {
+                'manual': '手动',
+                'startup': '启动应用时',
+                '30': '30 分钟',
+                '60': '1 小时',
+                '180': '3 小时',
+                '360': '6 小时',
+              }.entries.map((e) => ChoiceChip(
+                label: Text(e.value),
+                selected: _subAutoUpdate == e.key,
+                onSelected: (_) => setState(() => _subAutoUpdate = e.key),
+              )).toList()),
+            ]),
+          ),
+          const Divider(height: 24),
           const Text('内容管理', style: TextStyle(fontWeight: FontWeight.bold)),
+          SwitchListTile(
+            title: const Text('看完后置灰'),
+            subtitle: const Text('当天看过的视频在列表中置灰，次日恢复'),
+            value: _dimWatched,
+            onChanged: (v) => setState(() => _dimWatched = v),
+          ),
           ListTile(
             leading: const Icon(Icons.block),
             title: const Text('管理黑名单'),

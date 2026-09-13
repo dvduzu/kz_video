@@ -15,6 +15,9 @@ void main() async {
   if (homeRid != repo.settings.rid) {
     await repo.settings.setRid(homeRid);
   }
+  if (repo.settings.subAutoUpdate == 'startup') {
+    repo.fetchSubscriptionTimeline();
+  }
   runApp(MyApp(repo: repo));
 }
 

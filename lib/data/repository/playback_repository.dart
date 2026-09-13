@@ -27,6 +27,7 @@ class PlaybackRepository {
     }
   }
 
+  Set<String> get watched => store.watched.toSet();
   Future<Set<String>> watchedSet() async => store.watched.toSet();
 
   Future<void> clearWatched() async {

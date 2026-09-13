@@ -26,6 +26,7 @@ class SettingsStore {
   bool get dockGlass => p.getBool(PreferenceKeys.dockGlass) ?? true;
   bool get dockBorder => p.getBool(PreferenceKeys.dockBorder) ?? false;
   bool get dockShadow => p.getBool(PreferenceKeys.dockShadow) ?? false;
+  String get subAutoUpdate => p.getString(PreferenceKeys.subAutoUpdate) ?? '60';
   bool get rcmdEnabled => p.getBool(PreferenceKeys.settingRcmdEnabled) ?? false;
   int get rcmdBatch => p.getInt(PreferenceKeys.settingRcmdBatch) ?? 3;
   bool get guestMode => p.getBool(PreferenceKeys.guestMode) ?? false;
@@ -49,6 +50,7 @@ class SettingsStore {
   double get danmakuArea => (p.getDouble(PreferenceKeys.settingDmArea) ?? 0.5).clamp(0.1, 1.0);
   bool get danmakuStroke => p.getBool(PreferenceKeys.settingDmStroke) ?? true;
   int get danmakuWeight => (p.getInt(PreferenceKeys.settingDmWeight) ?? 0).clamp(0, 10);
+  bool get dimWatched => p.getBool(PreferenceKeys.settingDimWatched) ?? false;
 
   Future<void> setGuestMode(bool v) => p.setBool(PreferenceKeys.guestMode, v);
   Future<void> setCardOutline(bool v) => p.setBool(PreferenceKeys.settingCardOutline, v);
@@ -67,6 +69,7 @@ class SettingsStore {
   Future<void> setDanmakuArea(double v) => p.setDouble(PreferenceKeys.settingDmArea, v.clamp(0.1, 1.0));
   Future<void> setDanmakuStroke(bool v) => p.setBool(PreferenceKeys.settingDmStroke, v);
   Future<void> setDanmakuWeight(int v) => p.setInt(PreferenceKeys.settingDmWeight, v.clamp(0, 10));
+  Future<void> setDimWatched(bool v) => p.setBool(PreferenceKeys.settingDimWatched, v);
   Future<void> setHistoryEnabled(bool v) => p.setBool(PreferenceKeys.settingHistory, v);
   Future<void> setWatchLaterEnabled(bool v) => p.setBool(PreferenceKeys.settingWatchLater, v);
   Future<void> setMinDuration(int v) => p.setInt(PreferenceKeys.settingMinDuration, v);
@@ -84,4 +87,5 @@ class SettingsStore {
   Future<void> setDockGlass(bool v) => p.setBool(PreferenceKeys.dockGlass, v);
   Future<void> setDockBorder(bool v) => p.setBool(PreferenceKeys.dockBorder, v);
   Future<void> setDockShadow(bool v) => p.setBool(PreferenceKeys.dockShadow, v);
+  Future<void> setSubAutoUpdate(String v) => p.setString(PreferenceKeys.subAutoUpdate, v);
 }

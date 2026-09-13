@@ -244,6 +244,40 @@ class VideoInfo {
   Map<String, dynamic> toJson() => {'bvid': bvid, 'title': title, 'pic': pic, 'duration': duration, 'owner': owner, 'view': view, 'pubdate': pubdate, 'mid': mid, 'tid': tid, 'aid': aid};
 }
 
+class VideoShot {
+  final List<String> images;
+  final int imgXLen;
+  final int imgYLen;
+  final int imgXSize;
+  final int imgYSize;
+  final List<int> index;
+  VideoShot({required this.images, required this.imgXLen, required this.imgYLen, required this.imgXSize, required this.imgYSize, required this.index});
+
+  int get perImage => imgXLen * imgYLen;
+
+  int? frameIndexFor(int seconds) {
+    if (index.isEmpty) return null;
+    var count = 0;
+    for (final t in index) {
+      if (t <= seconds) {
+        count++;
+      } else {
+        break;
+      }
+    }
+    return (count - 2).clamp(0, index.length - 1);
+  }
+
+  factory VideoShot.fromJson(Map<String, dynamic> d) => VideoShot(
+    images: ((d['image'] as List?) ?? const []).cast<String>(),
+    imgXLen: (d['img_x_len'] as int?) ?? 10,
+    imgYLen: (d['img_y_len'] as int?) ?? 10,
+    imgXSize: (d['img_x_size'] as int?) ?? 160,
+    imgYSize: (d['img_y_size'] as int?) ?? 90,
+    index: ((d['index'] as List?) ?? const []).cast<int>(),
+  );
+}
+
 class SubtitleCue {
   final double from;
   final double to;

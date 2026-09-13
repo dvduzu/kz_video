@@ -101,6 +101,7 @@ class VideoRepository {
   Future<void> restoreLogin() => auth.restoreLogin();
   Future<void> logout() => auth.logout();
   Future<({String videoUrl, String? audioUrl})> getPlayUrl(String bvid, {int? qn}) => playApi.getPlayUrl(bvid, qn: qn);
+  Future<VideoShot?> getVideoShot(String bvid) => playApi.getVideoShot(bvid);
   Future<List<SearchUser>> searchUsers(String keyword) => searchApi.searchUsers(keyword);
   Future<List<DanmakuItem>> getDanmaku(String bvid, {int durationSec = 0}) => danmakuApi.getDanmaku(bvid, durationSec: durationSec);
   Future<List<({int mid, String name, String face})>> getVideoStaff(String bvid) => videoApi.getVideoStaff(bvid);
@@ -108,7 +109,7 @@ class VideoRepository {
   Future<({String name, String face, int fans, String banner})?> getUserInfo(int mid) => userApi.getUserInfo(mid);
   Future<({String name, String face, int fans, String banner})?> getUpInfoByVideo(String bvid) => videoApi.getUpInfoByVideo(bvid);
   Future<List<SubtitleCue>?> getSubtitles(String bvid) => subtitleApi.getSubtitles(bvid);
-  Future<List<VideoInfo>> getDailyVideos({bool force = false, int offset = 0}) => feed.getDailyVideos(force: force, offset: offset);
+  Future<List<VideoInfo>> getDailyVideos({bool force = false}) => feed.getDailyVideos(force: force);
   Future<List<VideoInfo>> getHotVideos({int pn = 1, int limit = 0}) => feed.getHotVideos(pn: pn, limit: limit);
   Future<List<VideoInfo>> fetchSubscriptionTimeline({void Function(int done, int total)? onProgress}) => feed.fetchSubscriptionTimeline(onProgress: onProgress);
   List<VideoInfo> cachedSubscriptionTimeline() => feed.cachedSubscriptionTimeline();
@@ -156,26 +157,5 @@ class VideoRepository {
     }
     await client.auth.setGuestMode(settings.guestMode);
     await feedCache.clearAll();
-  }
-
-  static String _today() {
-    final now = DateTime.now();
-    return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-  }
-
-  Future<bool> canRefreshToday() async {
-    return feedCache.unlimitedRefresh || feedCache.getRefreshCount(_today()) < 5;
-  }
-
-  bool get unlimitedRefresh => feedCache.unlimitedRefresh;
-  Future<void> setUnlimitedRefresh(bool v) => feedCache.setUnlimitedRefresh(v);
-
-  Future<void> recordRefresh() async {
-    final today = _today();
-    await feedCache.setRefreshCount(today, feedCache.getRefreshCount(today) + 1);
-  }
-
-  Future<void> resetRefreshCount() async {
-    await feedCache.setRefreshCount(_today(), 0);
   }
 }
